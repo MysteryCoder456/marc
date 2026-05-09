@@ -2,6 +2,7 @@ import datetime
 import io
 import time
 from base64 import b64encode
+from copy import copy
 from typing import Annotated
 
 from dotenv import load_dotenv
@@ -106,9 +107,15 @@ def main():
             for chunk in response:
                 chunk_msg: MessageLike = chunk["messages"][-1]
 
-                if chunk_msg.name != take_screenshot.name:  # pyright: ignore[reportAttributeAccessIssue]
-                    print()
-                    chunk_msg.pretty_print()
+                if (
+                    chunk_msg.type == "tool"  # pyright: ignore[reportAttributeAccessIssue]
+                    and chunk_msg.name == take_screenshot.name  # pyright: ignore[reportAttributeAccessIssue]
+                ):
+                    chunk_msg = copy(chunk_msg)
+                    chunk_msg.content = "[Output Hidden]"  # pyright: ignore[reportAttributeAccessIssue]
+
+                print()
+                chunk_msg.pretty_print()
 
         except KeyboardInterrupt:
             break
