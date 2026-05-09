@@ -1,5 +1,6 @@
 import datetime
 import io
+import time
 from base64 import b64encode
 from typing import Annotated
 
@@ -14,6 +15,7 @@ from langchain_core.prompts.chat import MessageLike
 from langgraph.checkpoint.memory import InMemorySaver
 from mss import MSS
 from PIL import Image
+from pynput.mouse import Button, Controller
 
 
 @tool
@@ -54,8 +56,30 @@ def take_screenshot(
                 mime_type="image/jpeg",
             )
         ],
+        name=take_screenshot.name,
         tool_call_id=tool_call_id,
     )
+
+
+@tool
+def click_screen(
+    position: tuple[int, int],
+    button: Button = Button.left,
+    count: int = 1,
+):
+    """
+    Clicks on the user's screen at the specified screen coordinates.
+
+    Args:
+        position: `(x, y)` screen coordinates to click at.
+        button: Which mouse button to click with. Default is `Button.left`.
+        count: How many times to click. Default is `1`.
+    """
+
+    mouse = Controller()
+    mouse.position = position
+    time.sleep(0.5)
+    mouse.click(button, count)
 
 
 def main():
@@ -65,8 +89,8 @@ def main():
     memory = InMemorySaver()
     agent = create_agent(
         model="anthropic:claude-haiku-4-5",
-        system_prompt="You are a helpful computer-use assistant. You must complete tasks that the user gives you by using the tools at your disposal.",
-        tools=[get_time, take_screenshot],
+        system_prompt="You are a helpful computer-use assistant who responds with concise answers. You must complete tasks that the user gives you by using the tools at your disposal.",
+        tools=[get_time, take_screenshot, click_screen],
         checkpointer=memory,
     )
 
@@ -81,8 +105,10 @@ def main():
             )
             for chunk in response:
                 chunk_msg: MessageLike = chunk["messages"][-1]
-                print()
-                chunk_msg.pretty_print()
+
+                if chunk_msg.name != take_screenshot.name:  # pyright: ignore[reportAttributeAccessIssue]
+                    print()
+                    chunk_msg.pretty_print()
 
         except KeyboardInterrupt:
             break
