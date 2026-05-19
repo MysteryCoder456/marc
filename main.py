@@ -274,7 +274,7 @@ def main():
                 for block in msg.content_blocks:
                     match block["type"]:
                         case "text":
-                            print(">", block["text"])
+                            print(">>", block["text"])
 
                         case "tool_call":
                             print(f"Calling Tool `{block['name']}` with args:")
