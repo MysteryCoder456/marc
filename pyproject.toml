@@ -12,14 +12,17 @@ dependencies = [
     "pillow>=12.2.0",
     "pynput>=1.8.1",
     "python-dotenv>=1.2.2",
+    "textual>=8.2.6",
 ]
 
 [dependency-groups]
 dev = [
     "ruff>=0.15.12",
+    "textual-dev>=1.8.0",
 ]
 
 [tool.pyright]
+reportUnknownArgumentType = false
 reportUnknownVariableType = false
 reportUnknownMemberType = false
 reportAny = false

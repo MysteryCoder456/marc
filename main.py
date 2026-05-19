@@ -2,18 +2,18 @@ import io
 import platform
 import time
 from base64 import b64encode
-from copy import copy
 from enum import Enum
+from pprint import pprint
 from typing import Annotated
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
+from langchain.messages import AnyMessage
 from langchain.tools import InjectedToolCallId, tool
 from langchain_core.messages import (
     ImageContentBlock,
     ToolMessage,
 )
-from langchain_core.prompts.chat import MessageLike
 from langgraph.checkpoint.memory import InMemorySaver
 from mss import MSS
 from PIL import Image
@@ -131,7 +131,6 @@ You should find out what OS the user is using before attempting to use keyboard 
 ### Mac:
 
 - Use the keyboard shortcut `ctrl + up` to use App Exposé, which shows all currently open windows.
-
 """
 
 
@@ -260,7 +259,8 @@ def main():
 
     while True:
         try:
-            user_input = input("\n> ")
+            user_input = input("> ")
+            print()
 
             response = agent.stream(
                 {"messages": [{"role": "user", "content": user_input}]},
@@ -268,17 +268,27 @@ def main():
                 stream_mode="values",
             )
             for chunk in response:
-                chunk_msg: MessageLike = chunk["messages"][-1]
+                msg: AnyMessage = chunk["messages"][-1]
+                print("=" * 30, msg.type.center(15), "=" * 30, end="\n" * 2)
 
-                if (
-                    chunk_msg.type == "tool"  # pyright: ignore[reportAttributeAccessIssue]
-                    and chunk_msg.name == take_screenshot.name  # pyright: ignore[reportAttributeAccessIssue]
-                ):
-                    chunk_msg = copy(chunk_msg)
-                    chunk_msg.content = "[Output Hidden]"  # pyright: ignore[reportAttributeAccessIssue]
+                for block in msg.content_blocks:
+                    match block["type"]:
+                        case "text":
+                            print(">", block["text"])
+
+                        case "tool_call":
+                            print(f"Calling Tool `{block['name']}` with args:")
+                            pprint(block["args"])
+
+                        case "image":
+                            block_copy = block.copy()
+                            block_copy["base64"] = "<Truncated>"
+                            pprint(block_copy)
+
+                        case _:
+                            pprint(block)
 
                 print()
-                chunk_msg.pretty_print()
 
         except KeyboardInterrupt:
             break
