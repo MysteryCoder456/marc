@@ -1,15 +1,19 @@
 import io
+import os
 import platform
+import subprocess
 import time
 from base64 import b64encode
+from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from pprint import pprint
 from typing import Annotated
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain.messages import AnyMessage
-from langchain.tools import InjectedToolCallId, tool
+from langchain.tools import InjectedToolCallId, ToolRuntime, tool
 from langchain_core.messages import (
     ImageContentBlock,
     ToolMessage,
@@ -21,6 +25,11 @@ from pynput.keyboard import Controller as KeyboardController
 from pynput.keyboard import Key
 from pynput.mouse import Button
 from pynput.mouse import Controller as MouseController
+
+
+@dataclass
+class RuntimeContext:
+    cwd: Path
 
 
 class ModifierKey(Enum):
@@ -162,7 +171,7 @@ def take_screenshot(
         sct_img = sct.grab(monitor)
 
     # Save image data into a buffer
-    img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)  # pyright: ignore[reportUnknownArgumentType]
+    img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
     buf = io.BytesIO()
     img.save(buf, format="JPEG")
     img_bytes = buf.getvalue()
@@ -239,6 +248,117 @@ def press_key(keys: list[str | ModifierKey]):
         controller.release(key)
 
 
+@tool
+def read_file(path: Path, runtime: ToolRuntime[RuntimeContext]) -> str:
+    """
+    Read the contents of the file at the specified path.
+
+    Args:
+        path:
+            Path to the file to be read. By default, this is interpreted as a
+            relative path to the current working directory. Use the
+            appropriate root path prefix to specify an absolute path (`C:\\` on
+            Windows, `/` on Unix-based systems).
+
+    Returns:
+        Contents of the file as a string
+    """
+
+    if not path.is_absolute():
+        path = runtime.context.cwd / path
+
+    with open(path, "r") as f:
+        return f.read()
+
+
+@tool
+def write_file(
+    path: Path, contents: str, runtime: ToolRuntime[RuntimeContext]
+):
+    """
+    Write to the file at the specified path. This will overwrite any existing
+    data in the file.
+
+    Args:
+        path:
+            Path to the file to be written to. By default, this is interpreted
+            as a relative path to the current working directory. Use the
+            appropriate root path prefix to specify an absolute path (`C:\\` on
+            Windows, `/` on Unix-based systems).
+        contents:
+            New contents to be written to the file.
+    """
+
+    if not path.is_absolute():
+        path = runtime.context.cwd / path
+
+    with open(path, "w") as f:
+        _ = f.write(contents)
+
+
+@tool
+def list_dir(path: Path, runtime: ToolRuntime[RuntimeContext]) -> list[str]:
+    """
+    List the files in directory at the specified path.
+
+    Args:
+        path:
+            Path to the directory. By default, this is interpreted as a
+            relative path to the current working directory. Use the
+            appropriate root path prefix to specify an absolute path (`C:\\` on
+            Windows, `/` on Unix-based systems).
+
+    Return:
+        A list of file and directory names in the specified directory
+    """
+
+    if not path.is_absolute():
+        path = runtime.context.cwd / path
+
+    return os.listdir(path)
+
+
+@tool
+def shell_command(
+    cmd: str, runtime: ToolRuntime[RuntimeContext]
+) -> str | tuple[str, str]:
+    """
+    Execute a shell command on the user's system at the current working
+    directory. A timeout of 30s exists for any command executed.
+
+    Always run non-interactive versions of commands whenever possible.
+
+    Args:
+        cmd: The shell command to execute.
+
+    Returns:
+        Output of the shell command as a tuple containing `(stdout, stderr)`,
+        or the string `TIMEOUT` if the command timed out.
+    """
+
+    # TODO: handle Windows case
+
+    user_shell = os.getenv("SHELL") or "/bin/bash"
+
+    try:
+        result = subprocess.run(
+            [user_shell, "-i", "-c", cmd],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=runtime.context.cwd,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        return result.stdout, result.stderr
+
+    except subprocess.TimeoutExpired:
+        return "TIMEOUT"
+
+
+# TODO: tool to change CWD
+
+
 def main():
     if not load_dotenv():
         print("Oops... Couldn't load .env file.")
@@ -253,19 +373,25 @@ def main():
             click_screen,
             type_keyboard,
             press_key,
+            read_file,
+            write_file,
+            list_dir,
+            shell_command,
         ],
         checkpointer=memory,
+        context_schema=RuntimeContext,
     )
 
     while True:
         try:
-            user_input = input("> ")
+            user_input = input(">>> ")
             print()
 
             response = agent.stream(
                 {"messages": [{"role": "user", "content": user_input}]},
                 {"configurable": {"thread_id": "thread-1"}},
                 stream_mode="values",
+                context=RuntimeContext(cwd=Path.cwd()),
             )
             for chunk in response:
                 msg: AnyMessage = chunk["messages"][-1]
@@ -274,7 +400,7 @@ def main():
                 for block in msg.content_blocks:
                     match block["type"]:
                         case "text":
-                            print(">>", block["text"])
+                            print(">", block["text"])
 
                         case "tool_call":
                             print(f"Calling Tool `{block['name']}` with args:")
@@ -292,6 +418,11 @@ def main():
 
         except KeyboardInterrupt:
             break
+
+        except Exception as e:
+            print("!" * 30, "ERROR".center(15), "!" * 30, end="\n" * 2)
+            pprint(e)
+            print()
 
 
 if __name__ == "__main__":
