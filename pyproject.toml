@@ -26,6 +26,8 @@ reportUnknownArgumentType = false
 reportUnknownVariableType = false
 reportUnknownMemberType = false
 reportUnknownParameterType = false
+reportUnusedCallResult = false
+reportMissingTypeArgument = false
 reportAny = false
 
 [tool.ruff]

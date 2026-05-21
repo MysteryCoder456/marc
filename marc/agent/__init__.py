@@ -423,7 +423,3 @@ def main():
             print("!" * 30, "ERROR".center(15), "!" * 30, end="\n" * 2)
             pprint(e)
             print()
-
-
-if __name__ == "__main__":
-    main()
