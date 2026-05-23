@@ -5,7 +5,3 @@
 #chat-input {
     margin-bottom: 1;
 }
-
-Name Container {
-    align: center middle;
-}

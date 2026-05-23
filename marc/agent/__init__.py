@@ -7,12 +7,9 @@ from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from pprint import pprint
 from typing import Annotated
 
-from dotenv import load_dotenv
 from langchain.agents import create_agent
-from langchain.messages import AnyMessage
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
 from langchain_core.messages import (
     ImageContentBlock,
@@ -359,10 +356,7 @@ def shell_command(
 # TODO: tool to change CWD
 
 
-def main():
-    if not load_dotenv():
-        print("Oops... Couldn't load .env file.")
-
+def create_new_agent():
     memory = InMemorySaver()
     agent = create_agent(
         model="anthropic:claude-haiku-4-5",
@@ -381,45 +375,46 @@ def main():
         checkpointer=memory,
         context_schema=RuntimeContext,
     )
+    return agent
 
-    while True:
-        try:
-            user_input = input(">>> ")
-            print()
-
-            response = agent.stream(
-                {"messages": [{"role": "user", "content": user_input}]},
-                {"configurable": {"thread_id": "thread-1"}},
-                stream_mode="values",
-                context=RuntimeContext(cwd=Path.cwd()),
-            )
-            for chunk in response:
-                msg: AnyMessage = chunk["messages"][-1]
-                print("=" * 30, msg.type.center(15), "=" * 30, end="\n" * 2)
-
-                for block in msg.content_blocks:
-                    match block["type"]:
-                        case "text":
-                            print(">", block["text"])
-
-                        case "tool_call":
-                            print(f"Calling Tool `{block['name']}` with args:")
-                            pprint(block["args"])
-
-                        case "image":
-                            block_copy = block.copy()
-                            block_copy["base64"] = "<Truncated>"
-                            pprint(block_copy)
-
-                        case _:
-                            pprint(block)
-
-                print()
-
-        except KeyboardInterrupt:
-            break
-
-        except Exception as e:
-            print("!" * 30, "ERROR".center(15), "!" * 30, end="\n" * 2)
-            pprint(e)
-            print()
+    # while True:
+    #     try:
+    #         user_input = input(">>> ")
+    #         print()
+    #
+    #         response = agent.stream(
+    #             {"messages": [{"role": "user", "content": user_input}]},
+    #             {"configurable": {"thread_id": "thread-1"}},
+    #             stream_mode="values",
+    #             context=RuntimeContext(cwd=Path.cwd()),
+    #         )
+    #         for chunk in response:
+    #             msg: AnyMessage = chunk["messages"][-1]
+    #             print("=" * 30, msg.type.center(15), "=" * 30, end="\n" * 2)
+    #
+    #             for block in msg.content_blocks:
+    #                 match block["type"]:
+    #                     case "text":
+    #                         print(">", block["text"])
+    #
+    #                     case "tool_call":
+    #                         print(f"Calling Tool `{block['name']}` with args:")
+    #                         pprint(block["args"])
+    #
+    #                     case "image":
+    #                         block_copy = block.copy()
+    #                         block_copy["base64"] = "<Truncated>"
+    #                         pprint(block_copy)
+    #
+    #                     case _:
+    #                         pprint(block)
+    #
+    #             print()
+    #
+    #     except KeyboardInterrupt:
+    #         break
+    #
+    #     except Exception as e:
+    #         print("!" * 30, "ERROR".center(15), "!" * 30, end="\n" * 2)
+    #         pprint(e)
+    #         print()

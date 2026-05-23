@@ -1,10 +1,10 @@
-from typing import final, override
+from typing import final
 
-from textual.app import App, ComposeResult
-from textual.containers import Container, VerticalGroup
-from textual.reactive import reactive
-from textual.widget import Widget
-from textual.widgets import Footer, Header, Input, Label, Static
+from dotenv import load_dotenv
+from textual.app import App
+from textual.widgets import Static
+
+from .screens import ChatScreen
 
 
 class Smiley(Static):
@@ -20,32 +20,14 @@ class Smiley(Static):
 
 
 @final
-class Name(Widget):
-    who = reactive("Hello", recompose=True)
-
-    @override
-    def compose(self) -> ComposeResult:
-        with Container():
-            yield Label(self.who)
-
-
-@final
 class MarcApp(App):
-    CSS_PATH = "main.tcss"
+    TITLE = "Marc"
+    SCREENS = {"chat": ChatScreen}
 
-    def on_input_changed(self, event: Input.Changed):
-        self.query_one(Name).who = event.value
-
-    @override
-    def compose(self) -> ComposeResult:
-        yield Header()
-
-        yield Name()
-
-        with VerticalGroup(id="bottom-dock"):
-            yield Input(placeholder="Chat", id="chat-input")
-            yield Footer()
+    def on_mount(self):
+        self.push_screen("chat")
 
 
+load_dotenv()
 app = MarcApp()
 
