@@ -5,3 +5,8 @@
 #chat-input {
     margin-bottom: 1;
 }
+
+.message {
+    padding: 0 1;
+    border: round $primary;
+}
