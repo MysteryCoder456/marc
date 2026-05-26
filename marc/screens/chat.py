@@ -25,13 +25,16 @@ class ChatScreen(Screen):
         # Focus input
         self.query_one("#chat-input").focus()
 
-    def watch_messages(self, prev_msgs: list[str], curr_msgs: list[str]):
-        new_msgs = [Label(msg) for msg in curr_msgs if msg not in prev_msgs]
-        if not new_msgs:
+    def watch_messages(self, msgs: list[str]):
+        # HACK: remove and readd all messages because no way to identify new ones
+
+        labels = [Label(msg) for msg in msgs]
+        if not labels:
             return
 
         msg_container = self.query_one("#messages")
-        msg_container.mount_all(new_msgs)
+        msg_container.remove_children()
+        msg_container.mount_all(labels)
 
     @on(Input.Submitted, "#chat-input")
     def send_message(self, event: Input.Submitted):
