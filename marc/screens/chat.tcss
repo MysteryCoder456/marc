@@ -6,6 +6,13 @@
     margin-bottom: 1;
 }
 
+#agent-running-indicator {
+    display: none;
+    margin-left: 1;
+    margin-bottom: 1;
+    height: auto;
+}
+
 .message {
     padding: 0 1;
     border: round $primary;
