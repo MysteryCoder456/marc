@@ -11,6 +11,7 @@ from typing import Annotated
 
 from langchain.agents import create_agent
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
+from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 from langchain_core.messages import (
     ImageContentBlock,
     ToolMessage,
@@ -359,7 +360,7 @@ def shell_command(
 def create_new_agent():
     memory = InMemorySaver()
     agent = create_agent(
-        model="anthropic:claude-haiku-4-5",
+        model="anthropic:claude-sonnet-4-6",
         system_prompt=SYSTEM_PROMPT,
         tools=[
             get_system_info,
@@ -374,6 +375,7 @@ def create_new_agent():
         ],
         checkpointer=memory,
         context_schema=RuntimeContext,
+        middleware=[AnthropicPromptCachingMiddleware()],  # pyright: ignore[reportArgumentType]
     )
     return agent
 
