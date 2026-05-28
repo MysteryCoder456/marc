@@ -111,8 +111,6 @@ class ChatScreen(Screen):
 
     @override
     def compose(self) -> ComposeResult:
-        yield Header()
-
         with VerticalScroll(id="chat-scroll-area"):
             yield VerticalGroup(id="messages")
             yield RunningIndicator()
