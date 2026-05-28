@@ -3,78 +3,22 @@ from typing import final, override
 
 from langchain_core.messages import AnyMessage
 from textual import on, work
-from textual.app import ComposeResult, RenderResult
+from textual.app import ComposeResult
 from textual.containers import VerticalGroup, VerticalScroll
 from textual.reactive import reactive
 from textual.screen import Screen
-from textual.timer import Timer
-from textual.widget import Widget
-from textual.widgets import Footer, Header, Input, Static
+from textual.widgets import Footer, Header, Input
 from textual.worker import Worker, WorkerState
 
 from marc.agent import RuntimeContext, create_new_agent
 
-
-@final
-class ChatMessage(Static):
-    def __init__(self, msg: AnyMessage) -> None:
-        super().__init__(id=f"msg-{msg.id}", classes="message", markup=False)
-
-        self.msg = msg
-        self.border_title = msg.type.capitalize()
-
-    @override
-    def render(self) -> RenderResult:
-        return str(self.msg.content)
-
-
-@final
-class RunningIndicator(Widget):
-    ANIMATION_FRAMES = [
-        "···",
-        "···",
-        "•··",
-        "·•·",
-        "··•",
-        "···",
-        "···",
-    ]
-    FRAME_DURATION = 0.1
-
-    current_frame_idx = reactive(0)
-
-    def __init__(self) -> None:
-        super().__init__(id="agent-running-indicator")
-
-        self.timer: Timer = self.set_interval(
-            self.FRAME_DURATION,
-            self.update_frame,
-            pause=True,
-        )
-
-    def show(self):
-        self.styles.display = "block"
-        self.current_frame_idx = 0
-        self.timer.reset()  # also resumes the timer
-
-    def hide(self):
-        self.styles.display = "none"
-        self.timer.pause()
-
-    def update_frame(self):
-        self.current_frame_idx = (self.current_frame_idx + 1) % len(
-            self.ANIMATION_FRAMES
-        )
-
-    @override
-    def render(self) -> RenderResult:
-        current_frame = self.ANIMATION_FRAMES[self.current_frame_idx]
-        return f"{current_frame} Thonking"
+from .indicator import RunningIndicator
+from .message import ChatMessage
 
 
 @final
 class ChatScreen(Screen):
-    CSS_PATH = "chat.tcss"
+    CSS_PATH = "styles.tcss"
 
     messages: reactive[list[AnyMessage]] = reactive([])
     added_messages: reactive[set[str]] = reactive(set())
