@@ -215,7 +215,10 @@ def call_computer_use_agent(query: str) -> list[ContentBlock]:
 def create_new_agent():
     memory = InMemorySaver()
 
-    model = ChatOpenAI(model="gpt-5.4")
+    model = ChatOpenAI(
+        model="gpt-5.4-mini",
+        reasoning={"effort": "medium", "summary": "concise"},
+    )
     agent = create_agent(
         model=model,
         system_prompt=SYSTEM_PROMPT,
