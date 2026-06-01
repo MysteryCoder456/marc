@@ -193,7 +193,7 @@ def shell_command(
 
 
 @tool
-def call_computer_use_agent(query: str) -> list[ContentBlock]:
+def use_computer(query: str) -> list[ContentBlock]:
     """
     Create an ephemeral subagent to handle computer-use tasks. Use relevant
     context to describe what you want the agent to do on the user's computer.
@@ -230,7 +230,7 @@ def create_new_agent():
             write_file,
             list_dir,
             shell_command,
-            call_computer_use_agent,
+            use_computer,
         ],
         # middleware=[AnthropicPromptCachingMiddleware()],
     )
