@@ -110,25 +110,27 @@ def take_screenshot(
 
 @tool
 def move_mouse(
-    position: tuple[int, int],
+    x: int,
+    y: int,
     delta: bool = False,
 ):
     """
     Moves the cursor to the specified screen coordinates on the user's screen.
-    If `delta` is `True`, position is treated as an offset to the mouse's
-    current position.
+    If `delta` is `True`, x and y are treated as offsets relative to the
+    mouse's current position.
 
     Args:
-        position: `(x, y)` screen coordinates to click at.
+        x: X-coordinate to move the mouse to.
+        y: Y-coordinate to move the mouse to.
         delta: Whether to treat `position` as a relative offset.
     """
 
     controller = MouseController()
 
     if delta:
-        controller.move(*position)
+        controller.move(x, y)
     else:
-        controller.position = position
+        controller.position = (x, y)
 
 
 @tool

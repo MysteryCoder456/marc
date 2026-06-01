@@ -1,18 +1,20 @@
-from enum import Enum
+from typing import final
+from aenum import MultiValueEnum  # pyright: ignore[reportMissingTypeStubs]
 
 from pynput.keyboard import Key
 
 
-class ModifierKey(Enum):
+@final
+class ModifierKey(MultiValueEnum):
     alt = "alt"
     backspace = "backspace"
     caps_lock = "caps_lock"
-    cmd = "cmd"
-    ctrl = "ctrl"
+    cmd = "cmd", "command"
+    ctrl = "ctrl", "control"
     delete = "delete"
     down = "down"
     end = "end"
-    enter = "enter"
+    enter = "enter", "return"
     esc = "esc"
     f1 = "f1"
     f2 = "f2"
@@ -40,7 +42,7 @@ class ModifierKey(Enum):
     page_up = "page_up"
     right = "right"
     shift = "shift"
-    space = "space"
+    space = "space", " "
     tab = "tab"
     up = "up"
     media_play_pause = "media_play_pause"
