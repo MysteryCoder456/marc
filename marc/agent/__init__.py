@@ -2,7 +2,6 @@ import io
 import os
 import platform
 import subprocess
-import time
 from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum
@@ -125,19 +124,34 @@ MODIFIER_KEY_MAP = {
     ModifierKey.media_previous: Key.media_previous,
 }
 
-SYSTEM_PROMPT = """# Computer Use Prompt
+SYSTEM_PROMPT = """# System Prompt
 
-You are a computer-use assistant. You must help the user achieve various tasks on their computer using the tools at your disposal.
+You are a competent coworker/colleague. You must help the user achieve various
+tasks on their computer using the tools at your disposal.
 
-Respond to all queries in a concise manner.
+Respond to all queries in a concise manner. If you are unsure about how to
+respond or do something, just say so; you aren't perfect.
 
-## Operating System Specific Instructions
+## Computer-use Tools
 
-You should find out what OS the user is using before attempting to use keyboard shortcuts.
+Several of the tools you have access to allow you to perform actions on the
+user's computer. You must be extremely careful when using these, as the
+actions you perform may be irreversible.
 
-### Mac:
+### Keyboard
 
-- Use the keyboard shortcut `ctrl + up` to use App Exposé, which shows all currently open windows.
+When you type something using the keyboard, always verify that the result
+is what you expected it to be before proceeding.
+
+Also ensure that the right window/area is in focus before you attempt to
+use keyboard shortcuts.
+
+### Mouse
+
+When you try to click something on the screen, move the mouse to the location
+but do not click immediately. First verify that the mouse is in the correct
+location, adjust its position if it isn't. Finally, click once you are sure
+the mouse is placed correctly.
 """
 
 
@@ -188,24 +202,57 @@ def take_screenshot(
 
 
 @tool
-def click_screen(
+def move_mouse(
     position: tuple[int, int],
+    delta: bool = False,
+):
+    """
+    Moves the cursor to the specified screen coordinates on the user's screen.
+    If `delta` is `True`, position is treated as an offset to the mouse's
+    current position.
+
+    Args:
+        position: `(x, y)` screen coordinates to click at.
+        delta: Whether to treat `position` as a relative offset.
+    """
+
+    controller = MouseController()
+
+    if delta:
+        controller.move(*position)
+    else:
+        controller.position = position
+
+
+@tool
+def click_mouse(
     button: Button = Button.left,
     count: int = 1,
 ):
     """
-    Clicks on the user's screen at the specified screen coordinates.
+    Clicks on the user's screen at the cursor's current position.
 
     Args:
-        position: `(x, y)` screen coordinates to click at.
         button: Which mouse button to click with. Default is `Button.left`.
         count: How many times to click. Default is `1`.
     """
 
     controller = MouseController()
-    controller.position = position
-    time.sleep(0.5)
     controller.click(button, count)
+
+
+@tool
+def scroll_mouse(dx: int = 0, dy: int = 0):
+    """
+    Scroll's with the specified deltas in the x and y directions.
+
+    Args:
+        dx: How many pixels to scroll horizontally.
+        dy: How many pixels to scroll vertically.
+    """
+
+    controller = MouseController()
+    controller.scroll(dx, dy)
 
 
 @tool
@@ -365,7 +412,9 @@ def create_new_agent():
         tools=[
             get_system_info,
             take_screenshot,
-            click_screen,
+            move_mouse,
+            click_mouse,
+            scroll_mouse,
             type_keyboard,
             press_key,
             read_file,
