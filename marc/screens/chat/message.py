@@ -20,7 +20,13 @@ class ChatMessage(Static):
         )
 
         self.content_blocks = msg.content_blocks
-        self.border_title = self.TITLES.get(msg.type, msg.type.capitalize())
+
+        if msg.type == "tool":
+            self.border_title = f"Tool - [italic]{msg.name}[/]"
+        else:
+            self.border_title = self.TITLES.get(
+                msg.type, msg.type.capitalize()
+            )
 
     @override
     def compose(self) -> ComposeResult:
@@ -31,8 +37,11 @@ class ChatMessage(Static):
                         yield Markdown(block["text"])
 
                     case "tool_call":
+                        args_str = ", ".join(
+                            f"{k}={v}" for k, v in block["args"].items()
+                        )
                         yield Static(
-                            f"[dim italic $text-accent]Tool Call: {block['name']}[/]"
+                            f"[dim italic $text-accent]Tool Call: {block['name']}({args_str})[/]"
                         )
 
                     case "image":

@@ -47,4 +47,4 @@ class RunningIndicator(Widget):
     @override
     def render(self) -> RenderResult:
         current_frame = self.ANIMATION_FRAMES[self.current_frame_idx]
-        return f"{current_frame} Thonking"
+        return f"{current_frame} Working"
