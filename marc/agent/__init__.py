@@ -6,15 +6,15 @@ from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from langchain.agents import create_agent
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
-from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 from langchain_core.messages import (
     ImageContentBlock,
     ToolMessage,
 )
+from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 from mss import MSS
 from PIL import Image
@@ -226,7 +226,7 @@ def move_mouse(
 
 @tool
 def click_mouse(
-    button: Button = Button.left,
+    button: Literal["left", "middle", "right"] = "left",
     count: int = 1,
 ):
     """
@@ -237,8 +237,14 @@ def click_mouse(
         count: How many times to click. Default is `1`.
     """
 
+    buttons = {
+        "left": Button.left,
+        "middle": Button.middle,
+        "right": Button.right,
+    }
+
     controller = MouseController()
-    controller.click(button, count)
+    controller.click(buttons[button], count)
 
 
 @tool
@@ -406,9 +412,13 @@ def shell_command(
 
 def create_new_agent():
     memory = InMemorySaver()
+
+    model = ChatOpenAI(model="gpt-5.4", use_responses_api=True)
     agent = create_agent(
-        model="anthropic:claude-sonnet-4-6",
+        model=model,
         system_prompt=SYSTEM_PROMPT,
+        checkpointer=memory,
+        context_schema=RuntimeContext,
         tools=[
             get_system_info,
             take_screenshot,
@@ -422,50 +432,6 @@ def create_new_agent():
             list_dir,
             shell_command,
         ],
-        checkpointer=memory,
-        context_schema=RuntimeContext,
-        middleware=[AnthropicPromptCachingMiddleware()],  # pyright: ignore[reportArgumentType]
+        # middleware=[AnthropicPromptCachingMiddleware()],
     )
     return agent
-
-    # while True:
-    #     try:
-    #         user_input = input(">>> ")
-    #         print()
-    #
-    #         response = agent.stream(
-    #             {"messages": [{"role": "user", "content": user_input}]},
-    #             {"configurable": {"thread_id": "thread-1"}},
-    #             stream_mode="values",
-    #             context=RuntimeContext(cwd=Path.cwd()),
-    #         )
-    #         for chunk in response:
-    #             msg: AnyMessage = chunk["messages"][-1]
-    #             print("=" * 30, msg.type.center(15), "=" * 30, end="\n" * 2)
-    #
-    #             for block in msg.content_blocks:
-    #                 match block["type"]:
-    #                     case "text":
-    #                         print(">", block["text"])
-    #
-    #                     case "tool_call":
-    #                         print(f"Calling Tool `{block['name']}` with args:")
-    #                         pprint(block["args"])
-    #
-    #                     case "image":
-    #                         block_copy = block.copy()
-    #                         block_copy["base64"] = "<Truncated>"
-    #                         pprint(block_copy)
-    #
-    #                     case _:
-    #                         pprint(block)
-    #
-    #             print()
-    #
-    #     except KeyboardInterrupt:
-    #         break
-    #
-    #     except Exception as e:
-    #         print("!" * 30, "ERROR".center(15), "!" * 30, end="\n" * 2)
-    #         pprint(e)
-    #         print()
