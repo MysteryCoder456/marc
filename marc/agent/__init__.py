@@ -217,7 +217,7 @@ def create_new_agent():
 
     model = ChatOpenAI(
         model="gpt-5.4-mini",
-        reasoning={"effort": "medium", "summary": "concise"},
+        reasoning={"effort": "medium", "summary": "auto"},
     )
     agent = create_agent(
         model=model,

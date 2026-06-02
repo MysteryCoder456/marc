@@ -4,10 +4,8 @@ from typing import Annotated, Literal
 
 from langchain.agents import create_agent
 from langchain.tools import InjectedToolCallId, tool
-from langchain_core.messages import (
-    ImageContentBlock,
-    ToolMessage,
-)
+from langchain_core.messages import ToolMessage
+from langchain_core.messages.content import create_image_block
 from langchain_openai import ChatOpenAI
 from mss import MSS
 from PIL import Image
@@ -109,11 +107,11 @@ def take_screenshot(
 
     return ToolMessage(
         content_blocks=[
-            ImageContentBlock(
-                type="image",
+            create_image_block(
                 base64=b64encode(img_bytes).decode("utf-8"),
                 mime_type="image/jpeg",
-            )
+                detail="original",
+            ),
         ],
         name=take_screenshot.name,
         tool_call_id=tool_call_id,
@@ -222,7 +220,7 @@ def press_key(keys: list[str | ModifierKey]):
 
 def create_computer_use_agent():
     model = ChatOpenAI(
-        model="gpt-5.5",
+        model="gpt-5.4",
         use_responses_api=True,
         reasoning={"effort": "none"},
     )
