@@ -1,4 +1,5 @@
 import io
+from asyncio import sleep
 from base64 import b64encode
 from typing import Annotated, Literal
 
@@ -31,8 +32,13 @@ text.
   is clear and low-risk, move and click without an intermediate screenshot.
 - Run short, obvious sequences from one stable screenshot when each step is
   low-risk, such as focusing a field, typing text, and pressing Enter.
+- After a click, submit, scroll, shortcut, or app switch that may trigger
+  loading, animation, or focus changes, use `wait` briefly before taking the
+  next screenshot.
 - Prefer keyboard shortcuts, search fields, and direct text entry when they are
   likely faster than visual navigation.
+- Prefer keyboard scrolling over mouse scrolling when the scrollable area is
+  focused or can be focused cheaply.
 - If the first screenshot already proves the goal is done, report completion
   without more tools.
 - After two failed attempts at the same target, stop and report the blocker.
@@ -44,7 +50,19 @@ text.
   reporting if the current evidence is stale.
 - For routine navigation or form entry, one screenshot after a safe action
   sequence is enough.
+- Prefer one short `wait` plus one screenshot over repeated immediate
+  screenshots while the UI is still settling.
 - Use the latest screenshot as final evidence when it already proves the result.
+
+## Waiting
+
+- Use `wait(0.2)` to `wait(1)` for small UI updates, focus changes, menus,
+  animations, and short transitions.
+- Use `wait(1)` to `wait(3)` after page loads, app launches, submits, or other
+  actions expected to take longer.
+- If a spinner or progress state remains visible, use at most two wait-and-check
+  cycles before reporting that the task is blocked or still loading.
+- Do not wait when no visible or expected background change is pending.
 
 ## Safety
 
@@ -74,6 +92,8 @@ text.
 - Use `type_keyboard` for text and `press_key` for shortcuts or special keys.
 - Use `ModifierKey` enum values for modifier and special keys, not plain string
   names.
+- For scrolling, prefer `page_down`, `page_up`, `down`, `up`, `home`, `end`,
+  or `space` with `press_key` after focusing the scrollable area.
 - Verify typed text only when mistakes would matter or before submitting.
 
 ## Final Report
@@ -82,6 +102,11 @@ Return at most two short sentences:
 
 - what was completed and the visible evidence; or
 - the blocker, last visible state, and any uncertainty.
+
+## **CRITICAL**
+
+You are NOT allowed to call multiple tools in one turn. Only use one tool
+at a time.
 """
 
 
@@ -167,20 +192,6 @@ def click_mouse(
 
 
 @tool
-def scroll_mouse(dx: int = 0, dy: int = 0):
-    """
-    Scroll's with the specified deltas in the x and y directions.
-
-    Args:
-        dx: How many pixels to scroll horizontally.
-        dy: How many pixels to scroll vertically.
-    """
-
-    controller = MouseController()
-    controller.scroll(dx, dy)
-
-
-@tool
 def type_keyboard(text: str):
     """
     Type out a string of characters on the user's keyboard. Use this to type
@@ -218,6 +229,18 @@ def press_key(keys: list[str | ModifierKey]):
         controller.release(key)
 
 
+@tool
+async def wait(seconds: float):
+    """
+    Wait for a specified amount of time before continuing.
+
+    Args:
+        seconds: How many seconds to wait for.
+    """
+
+    await sleep(seconds)
+
+
 def create_computer_use_agent():
     model = ChatOpenAI(
         model="gpt-5.4",
@@ -231,9 +254,9 @@ def create_computer_use_agent():
             take_screenshot,
             move_mouse,
             click_mouse,
-            scroll_mouse,
             type_keyboard,
             press_key,
+            wait,
         ],
     )
     return agent

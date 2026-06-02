@@ -193,7 +193,7 @@ def shell_command(
 
 
 @tool
-def use_computer(query: str) -> list[ContentBlock]:
+async def use_computer(query: str) -> list[ContentBlock]:
     """
     Create an ephemeral subagent to handle computer-use tasks. Use relevant
     context to describe what you want the agent to do on the user's computer.
@@ -205,7 +205,7 @@ def use_computer(query: str) -> list[ContentBlock]:
     """
 
     computer_agent = create_computer_use_agent()
-    result = computer_agent.invoke(
+    result = await computer_agent.ainvoke(
         {"messages": [{"role": "user", "content": query}]}
     )
     final_msg: AnyMessage = result["messages"][-1]
