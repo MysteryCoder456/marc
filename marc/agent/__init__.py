@@ -52,7 +52,7 @@ tools.
 
 ## Computer-Use Delegation
 
-Use `call_computer_use_agent` only for tasks that require interacting with the
+Use `use_computer` only for tasks that require interacting with the
 graphical desktop: clicking, typing into apps, navigating windows, reading
 visual UI state, or verifying something that only appears on screen.
 
