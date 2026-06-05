@@ -12,6 +12,7 @@ from langchain_core.messages import (
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import VerticalGroup, VerticalScroll
+from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import Footer, Input
@@ -26,10 +27,15 @@ from .message import ChatMessage
 
 @final
 class ChatScreen(Screen):
+    @final
+    class Loaded(Message):
+        def __init__(self, chat_id: UUID) -> None:
+            super().__init__()
+            self.chat_id = chat_id
+
     CSS_PATH = "styles.tcss"
 
     messages: reactive[list[AnyMessage]] = reactive([])
-    added_messages: reactive[set[str]] = reactive(set())
     is_agent_running = reactive(False)
 
     def __init__(self, chat_id: UUID | None = None) -> None:
@@ -38,14 +44,16 @@ class ChatScreen(Screen):
         self.chat_id = chat_id
         self.agent = create_new_agent()
         self.is_context_loaded = True
+        self.added_messages: set[str] = set()
 
     async def load_chat(self, chat_id: UUID):
         # Load previous messages
         chat_path = CHATS_PATH / f"{chat_id}.json"
         async with aiofiles.open(chat_path, "r") as f:
             messages_json = await f.read()
-            messages_dict = json.loads(messages_json)
-            self.messages = messages_from_dict(messages_dict)  # pyright: ignore[reportAttributeAccessIssue]
+
+        messages_dict = json.loads(messages_json)
+        self.messages = messages_from_dict(messages_dict)  # pyright: ignore[reportAttributeAccessIssue]
 
         self.log("Loaded chat", chat_id, "from disk.")
         self.is_context_loaded = False
@@ -77,6 +85,8 @@ class ChatScreen(Screen):
             # Opening new chat
             self.chat_id = uuid4()
 
+        self.app.post_message(ChatScreen.Loaded(self.chat_id))
+
         # Focus input
         self.query_one("#chat-input").focus()
 
@@ -89,10 +99,7 @@ class ChatScreen(Screen):
         new_msgs = [msg for msg in msgs if msg.id not in self.added_messages]
         if not new_msgs:
             return
-
-        # Update state
         self.added_messages.update([msg.id for msg in new_msgs])  # pyright: ignore[reportArgumentType]
-        self.mutate_reactive(ChatScreen.added_messages)
 
         # Mount new message widgets
         msg_widgets = [ChatMessage(msg) for msg in new_msgs]
@@ -167,6 +174,7 @@ class ChatScreen(Screen):
 
     @override
     def compose(self) -> ComposeResult:
+        # FIXME: new chat's messages stay when loading existing chat
         with VerticalScroll(id="chat-scroll-area"):
             yield VerticalGroup(id="messages")
             yield RunningIndicator()
