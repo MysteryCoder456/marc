@@ -35,7 +35,7 @@ class ChatScreen(Screen):
 
     CSS_PATH = "styles.tcss"
 
-    messages: reactive[list[AnyMessage]] = reactive([])
+    messages: reactive[list[AnyMessage]] = reactive(list, init=False)
     is_agent_running = reactive(False)
 
     def __init__(self, chat_id: UUID | None = None) -> None:
@@ -174,7 +174,6 @@ class ChatScreen(Screen):
 
     @override
     def compose(self) -> ComposeResult:
-        # FIXME: new chat's messages stay when loading existing chat
         with VerticalScroll(id="chat-scroll-area"):
             yield VerticalGroup(id="messages")
             yield RunningIndicator()
