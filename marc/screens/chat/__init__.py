@@ -1,16 +1,24 @@
+import json
 from pathlib import Path
 from typing import final, override
+from uuid import UUID, uuid4
 
-from langchain_core.messages import AnyMessage
+import aiofiles
+from langchain_core.messages import (
+    AnyMessage,
+    messages_from_dict,
+    messages_to_dict,
+)
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import VerticalGroup, VerticalScroll
 from textual.reactive import reactive
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Input
+from textual.widgets import Footer, Input
 from textual.worker import Worker, WorkerState
 
 from marc.agent import RuntimeContext, create_new_agent
+from marc.dirs import CHATS_PATH
 
 from .indicator import RunningIndicator
 from .message import ChatMessage
@@ -24,18 +32,57 @@ class ChatScreen(Screen):
     added_messages: reactive[set[str]] = reactive(set())
     is_agent_running = reactive(False)
 
-    def __init__(self) -> None:
+    def __init__(self, chat_id: UUID | None = None) -> None:
         super().__init__()
 
+        self.chat_id = chat_id
         self.agent = create_new_agent()
+        self.is_context_loaded = True
 
-    def on_mount(self):
-        # Focus input
-        self.query_one("#chat-input").focus()
+    async def load_chat(self, chat_id: UUID):
+        # Load previous messages
+        chat_path = CHATS_PATH / f"{chat_id}.json"
+        async with aiofiles.open(chat_path, "r") as f:
+            messages_json = await f.read()
+            messages_dict = json.loads(messages_json)
+            self.messages = messages_from_dict(messages_dict)  # pyright: ignore[reportAttributeAccessIssue]
+
+        self.log("Loaded chat", chat_id, "from disk.")
+        self.is_context_loaded = False
+
+    async def save_chat(self, chat_id: UUID):
+        if not self.messages:
+            return
+
+        # Save chat to disk
+        chat_path = CHATS_PATH / f"{chat_id}.json"
+        async with aiofiles.open(chat_path, "w") as f:
+            messages_dict = messages_to_dict(self.messages)
+            messages_json = json.dumps(messages_dict)
+            await f.write(messages_json)
+
+        self.log("Saved chat", chat_id, "to disk.")
 
     def scroll_to_end(self):
         scroller = self.query_one("#chat-scroll-area")
         scroller.scroll_end(animate=False)
+
+    # ================ ↓ TEXTUAL FUNCTIONS ↓ ================
+
+    async def on_mount(self):
+        if self.chat_id:
+            # Opening existing chat
+            await self.load_chat(self.chat_id)
+        else:
+            # Opening new chat
+            self.chat_id = uuid4()
+
+        # Focus input
+        self.query_one("#chat-input").focus()
+
+    async def on_unmount(self):
+        if self.chat_id:
+            await self.save_chat(self.chat_id)
 
     async def watch_messages(self, msgs: list[AnyMessage]):
         # Find newly added messages
@@ -92,22 +139,31 @@ class ChatScreen(Screen):
 
     @work(name="agent_message", exclusive=True)
     async def send_message_to_agent(self, msg: str):
+        query_messages: list[AnyMessage | dict[str, str]] = [
+            {"role": "user", "content": msg}
+        ]
+
+        if not self.is_context_loaded:
+            # Inject session's previous messages into context
+            query_messages = self.messages + query_messages
+            self.is_context_loaded = True
+
         response = self.agent.astream(
-            {"messages": [{"role": "user", "content": msg}]},
-            {"configurable": {"thread_id": "thread-1"}},
+            {"messages": query_messages},
+            {"configurable": {"thread_id": self.chat_id}},
             stream_mode="values",
             context=RuntimeContext(cwd=Path.cwd()),
         )
-        latest_seen_idx = 0
+        next_msg_idx = len(self.messages)
 
         async for chunk in response:
             chunk_msgs = chunk["messages"]
-            new_msgs = chunk_msgs[latest_seen_idx:]
+            new_msgs = chunk_msgs[next_msg_idx:]
 
             self.messages.extend(new_msgs)
             self.mutate_reactive(ChatScreen.messages)
 
-            latest_seen_idx = len(chunk_msgs)
+            next_msg_idx = len(chunk_msgs)
 
     @override
     def compose(self) -> ComposeResult:

@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from textual.app import App
 from textual.widgets import Static
 
+from .dirs import ensure_paths
 from .screens import ChatScreen
 
 
@@ -22,12 +23,11 @@ class Smiley(Static):
 @final
 class MarcApp(App):
     TITLE = "Marc"
-    SCREENS = {"chat": ChatScreen}
 
     def on_mount(self):
-        self.push_screen("chat")
+        ensure_paths()
+        self.push_screen(ChatScreen())
 
 
 load_dotenv()
 app = MarcApp()
-
