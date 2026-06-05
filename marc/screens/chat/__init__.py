@@ -51,7 +51,7 @@ class ChatScreen(Screen):
         self.is_context_loaded = False
 
     async def save_chat(self, chat_id: UUID):
-        if not self.messages:
+        if not (self.messages and self.is_context_loaded):
             return
 
         # Save chat to disk
