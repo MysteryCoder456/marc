@@ -15,6 +15,7 @@ from textual.widgets import Footer, Input
 from textual.worker import Worker, WorkerState
 
 from marc.agent import RuntimeContext, create_new_agent
+from marc.agent.chat_name import generate_chat_name
 
 from .indicator import RunningIndicator
 from .message import ChatMessage
@@ -132,24 +133,23 @@ class ChatScreen(Screen):
 
     @work(name="agent_message", exclusive=True)
     async def send_message_to_agent(self, msg: str):
+        # Construct query
         query_messages: list[AnyMessage | dict[str, str]] = [
             {"role": "user", "content": msg}
         ]
-
         if not self.is_context_loaded:
             # Inject session's previous messages into context
             query_messages = self.session.messages + query_messages
             self.is_context_loaded = True
 
-        # TODO: Generate a name for this session
+        # Stream agent responses
+        next_msg_idx = len(self.session.messages)
         response = self.agent.astream(
             {"messages": query_messages},
             {"configurable": {"thread_id": self.chat_id}},
             stream_mode="values",
             context=RuntimeContext(cwd=Path.cwd()),
         )
-        next_msg_idx = len(self.session.messages)
-
         async for chunk in response:
             chunk_msgs = chunk["messages"]
             new_msgs = chunk_msgs[next_msg_idx:]
@@ -158,6 +158,16 @@ class ChatScreen(Screen):
             self.mutate_reactive(ChatScreen.session)
 
             next_msg_idx = len(chunk_msgs)
+
+        # Generate a name for this session
+        if not self.session.name:
+
+            async def name_work():
+                self.session.name = await generate_chat_name(
+                    self.session.messages
+                )
+
+            self.run_worker(name_work())
 
     @override
     def compose(self) -> ComposeResult:

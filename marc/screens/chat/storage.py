@@ -19,7 +19,7 @@ from marc.dirs import DIRS
 
 class ChatSession(BaseModel):
     id: UUID = Field(default_factory=uuid4)
-    name: str = Field(default="Untitled")
+    name: str | None = Field(default=None)
     messages: list[AnyMessage] = Field(default=[])
 
     @field_serializer("messages", mode="plain")
@@ -100,13 +100,17 @@ class ChatStorage:
         cls._ensure_paths()
 
         # Sanitize chat name
-        safe_name = "".join(
-            ch
-            for ch in chat.name
-            if ch in string.printable and ch not in string.punctuation
-        )
-        for ch in string.whitespace:
-            safe_name = safe_name.replace(ch, "_")
+        if chat.name:
+            safe_name = "".join(
+                ch
+                for ch in chat.name
+                if ch in string.printable and ch not in string.punctuation
+            )
+            for ch in string.whitespace:
+                safe_name = safe_name.replace(ch, "_")
+
+        else:
+            safe_name = "Untitled"
 
         # Save to disk
         chat_path = cls.CHATS_PATH / f"{chat.id}+{safe_name}.json"

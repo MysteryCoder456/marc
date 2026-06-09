@@ -44,11 +44,11 @@ class ChatListProvider(Provider):
             if chat.id == self.app.current_chat:
                 continue
 
-            score = matcher.match(chat.name)
+            score = matcher.match(chat.name or "Untitled")
             if score > 0:
                 yield Hit(
                     score,
-                    matcher.highlight(chat.name),
+                    matcher.highlight(chat.name or "Untitled"),
                     partial(self.app.open_chat, chat.id),
                 )
 
@@ -61,7 +61,7 @@ class ChatListProvider(Provider):
                 continue
 
             yield DiscoveryHit(
-                chat.name,
+                chat.name or "Untitled",
                 partial(self.app.open_chat, chat.id),
             )
 
