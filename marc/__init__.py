@@ -10,8 +10,7 @@ from textual.command import CommandPalette, DiscoveryHit, Hit, Hits, Provider
 from textual.screen import Screen
 from textual.widgets import Static
 
-from .screens import ChatScreen
-from .screens.chat.storage import ChatSession, ChatStorage
+from marc.chat import ChatScreen, ChatSession, ChatStorage
 
 
 class Smiley(Static):
