@@ -1,6 +1,5 @@
 from collections.abc import Iterable
 from functools import partial
-from pathlib import Path
 from typing import final, override
 from uuid import UUID
 
@@ -11,8 +10,8 @@ from textual.command import CommandPalette, DiscoveryHit, Hit, Hits, Provider
 from textual.screen import Screen
 from textual.widgets import Static
 
-from .dirs import CHATS_PATH, ensure_paths
 from .screens import ChatScreen
+from .screens.chat.storage import ChatSession, ChatStorage
 
 
 class Smiley(Static):
@@ -29,49 +28,41 @@ class Smiley(Static):
 
 @final
 class ChatListProvider(Provider):
-    # TODO: show chat names and last modified date
-
-    chat_ids: list[UUID] = []
-
-    def list_chat_paths(self) -> list[Path]:
-        paths = list(CHATS_PATH.glob("*.json"))
-        paths.sort(key=lambda p: p.stat().st_ctime, reverse=True)
-        return paths
+    chats: list[ChatSession] = []
 
     @override
     async def startup(self) -> None:
-        worker = self.app.run_worker(self.list_chat_paths, thread=True)
-        chat_paths = await worker.wait()
-        self.chat_ids = [UUID(path.stem) for path in chat_paths]
+        worker = self.app.run_worker(ChatStorage.list_chats, thread=True)
+        self.chats = await worker.wait()
 
     @override
     async def search(self, query: str) -> Hits:
         assert isinstance(self.app, MarcApp)
         matcher = self.matcher(query)
 
-        for chat_id in self.chat_ids:
-            if chat_id == self.app.current_chat:
+        for chat in self.chats:
+            if chat.id == self.app.current_chat:
                 continue
 
-            score = matcher.match(chat_id.hex)
+            score = matcher.match(chat.name)
             if score > 0:
                 yield Hit(
                     score,
-                    matcher.highlight(chat_id.hex),
-                    partial(self.app.open_chat, chat_id),
+                    matcher.highlight(chat.name),
+                    partial(self.app.open_chat, chat.id),
                 )
 
     @override
     async def discover(self) -> Hits:
         assert isinstance(self.app, MarcApp)
 
-        for chat_id in self.chat_ids:
-            if chat_id == self.app.current_chat:
+        for chat in self.chats:
+            if chat.id == self.app.current_chat:
                 continue
 
             yield DiscoveryHit(
-                chat_id.hex,
-                partial(self.app.open_chat, chat_id),
+                chat.name,
+                partial(self.app.open_chat, chat.id),
             )
 
 
@@ -90,7 +81,6 @@ class MarcApp(App):
             self.switch_screen(screen)
 
     def on_mount(self):
-        ensure_paths()
         self.open_chat()
 
     def action_new_chat(self):

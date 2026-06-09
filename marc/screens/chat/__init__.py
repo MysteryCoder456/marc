@@ -1,13 +1,9 @@
-import json
 from pathlib import Path
 from typing import final, override
-from uuid import UUID, uuid4
+from uuid import UUID
 
-import aiofiles
 from langchain_core.messages import (
     AnyMessage,
-    messages_from_dict,
-    messages_to_dict,
 )
 from textual import on, work
 from textual.app import ComposeResult
@@ -19,10 +15,10 @@ from textual.widgets import Footer, Input
 from textual.worker import Worker, WorkerState
 
 from marc.agent import RuntimeContext, create_new_agent
-from marc.dirs import CHATS_PATH
 
 from .indicator import RunningIndicator
 from .message import ChatMessage
+from .storage import ChatSession, ChatStorage
 
 
 @final
@@ -35,7 +31,7 @@ class ChatScreen(Screen):
 
     CSS_PATH = "styles.tcss"
 
-    messages: reactive[list[AnyMessage]] = reactive(list, init=False)
+    session = reactive(ChatSession, init=False)
     is_agent_running = reactive(False)
 
     def __init__(self, chat_id: UUID | None = None) -> None:
@@ -46,31 +42,6 @@ class ChatScreen(Screen):
         self.is_context_loaded = True
         self.added_messages: set[str] = set()
 
-    async def load_chat(self, chat_id: UUID):
-        # Load previous messages
-        chat_path = CHATS_PATH / f"{chat_id}.json"
-        async with aiofiles.open(chat_path, "r") as f:
-            messages_json = await f.read()
-
-        messages_dict = json.loads(messages_json)
-        self.messages = messages_from_dict(messages_dict)  # pyright: ignore[reportAttributeAccessIssue]
-
-        self.log("Loaded chat", chat_id, "from disk.")
-        self.is_context_loaded = False
-
-    async def save_chat(self, chat_id: UUID):
-        if not (self.messages and self.is_context_loaded):
-            return
-
-        # Save chat to disk
-        chat_path = CHATS_PATH / f"{chat_id}.json"
-        async with aiofiles.open(chat_path, "w") as f:
-            messages_dict = messages_to_dict(self.messages)
-            messages_json = json.dumps(messages_dict)
-            await f.write(messages_json)
-
-        self.log("Saved chat", chat_id, "to disk.")
-
     def scroll_to_end(self):
         scroller = self.query_one("#chat-scroll-area")
         scroller.scroll_end(animate=False)
@@ -78,12 +49,16 @@ class ChatScreen(Screen):
     # ================ ↓ TEXTUAL FUNCTIONS ↓ ================
 
     async def on_mount(self):
-        if self.chat_id:
-            # Opening existing chat
-            await self.load_chat(self.chat_id)
-        else:
-            # Opening new chat
-            self.chat_id = uuid4()
+        if self.chat_id:  # Open existing chat
+
+            def load_work():
+                return ChatStorage.load_chat(self.chat_id)  # pyright: ignore[reportArgumentType]
+
+            self.session = await self.run_worker(load_work, thread=True).wait()
+            self.is_context_loaded = False
+
+        else:  # Open new chat
+            self.chat_id = self.session.id
 
         self.app.post_message(ChatScreen.Loaded(self.chat_id))
 
@@ -91,12 +66,23 @@ class ChatScreen(Screen):
         self.query_one("#chat-input").focus()
 
     async def on_unmount(self):
-        if self.chat_id:
-            await self.save_chat(self.chat_id)
+        if not (
+            self.chat_id and self.session.messages and self.is_context_loaded
+        ):
+            return
 
-    async def watch_messages(self, msgs: list[AnyMessage]):
+        def save_work():
+            ChatStorage.save_chat(self.session)
+
+        await self.run_worker(save_work, thread=True).wait()
+
+    async def watch_session(self, session: ChatSession):
         # Find newly added messages
-        new_msgs = [msg for msg in msgs if msg.id not in self.added_messages]
+        new_msgs = [
+            msg
+            for msg in session.messages
+            if msg.id not in self.added_messages
+        ]
         if not new_msgs:
             return
         self.added_messages.update([msg.id for msg in new_msgs])  # pyright: ignore[reportArgumentType]
@@ -152,23 +138,24 @@ class ChatScreen(Screen):
 
         if not self.is_context_loaded:
             # Inject session's previous messages into context
-            query_messages = self.messages + query_messages
+            query_messages = self.session.messages + query_messages
             self.is_context_loaded = True
 
+        # TODO: Generate a name for this session
         response = self.agent.astream(
             {"messages": query_messages},
             {"configurable": {"thread_id": self.chat_id}},
             stream_mode="values",
             context=RuntimeContext(cwd=Path.cwd()),
         )
-        next_msg_idx = len(self.messages)
+        next_msg_idx = len(self.session.messages)
 
         async for chunk in response:
             chunk_msgs = chunk["messages"]
             new_msgs = chunk_msgs[next_msg_idx:]
 
-            self.messages.extend(new_msgs)
-            self.mutate_reactive(ChatScreen.messages)
+            self.session.messages.extend(new_msgs)
+            self.mutate_reactive(ChatScreen.session)
 
             next_msg_idx = len(chunk_msgs)
 
