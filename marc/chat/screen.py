@@ -1,10 +1,11 @@
 from pathlib import Path
-from typing import final, override
+from typing import Any, final, override
 from uuid import UUID
 
 from langchain_core.messages import (
     AnyMessage,
 )
+from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import VerticalGroup, VerticalScroll
@@ -39,9 +40,9 @@ class ChatScreen(Screen):
         super().__init__()
 
         self.chat_id = chat_id
-        self.agent = create_new_agent()
         self.is_context_loaded = True
         self.added_messages: set[str] = set()
+        self.agent: CompiledStateGraph[Any, Any]  # pyright: ignore[reportExplicitAny]
 
     def scroll_to_end(self):
         scroller = self.query_one("#chat-scroll-area")
@@ -50,6 +51,9 @@ class ChatScreen(Screen):
     # ================ ↓ TEXTUAL FUNCTIONS ↓ ================
 
     async def on_mount(self):
+        # Initialize agent
+        self.agent = await create_new_agent()
+
         if self.chat_id:  # Open existing chat
 
             def load_work():
