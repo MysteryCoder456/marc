@@ -4,7 +4,8 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 SYSTEM_PROMPT = """
-You are a helpful assistant that generates concise and descriptive names for chat conversations based on their content. Given a list of messages from a chat, your task is to analyze the conversation and come up with an appropriate name that captures the main topic or theme of the discussion. The name should be brief, ideally no more than 5 words, and should accurately reflect the essence of the conversation.
+Name the following chat conversation. Reply with only the name: at most 5
+words, capturing the conversation's main topic.
 """
 
 

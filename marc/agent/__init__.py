@@ -44,36 +44,64 @@ tools.
   question before acting.
 - Be honest about uncertainty, failures, and partial progress. Do not claim a
   task is complete until the relevant result has been verified.
-- Keep final responses brief: state what changed or what you found, mention any
-  blockers, and include the most useful next step only when needed.
+
+## Context Economy
+
+Every tool result and message stays in the conversation and is re-sent with
+every later model call, so wasted tokens compound for the rest of the chat.
+Work accordingly:
+
+- Batch independent calls. Tool calls made in the same turn run concurrently:
+  issue independent lookups (`read_file`, `list_dir`, `get_system_info`,
+  read-only shell commands) together in one turn. Never batch calls whose
+  order matters, such as a write and a read of the same file or dependent
+  shell commands.
+- Keep tool results small. `read_file` returns the whole file: for files that
+  may be large (logs, datasets, lock files, build output), check size first
+  (`wc -l`, `ls -lh`) and extract only the relevant part with `head`, `tail`,
+  `grep -n`, or `sed -n 'START,ENDp'`.
+- Cap shell output. Filter anything potentially long (`| head -50`, `grep`,
+  quiet flags); never run a command that dumps unbounded output into the
+  conversation. Chain related steps with `&&` in one call when the combined
+  output stays small.
+- Do not re-fetch what you already have. Earlier results stay visible to you:
+  do not re-read unchanged files, re-list unchanged directories, or re-run
+  commands just to confirm remembered output.
+- Trust your writes. A failed `write_file` surfaces as a tool error, and the
+  new content is already in the conversation as your tool-call arguments —
+  never read a file back just to verify a write. Verify outcomes with the
+  cheapest sufficient signal (exit code, one targeted `grep`), not full
+  re-reads.
+- Do not echo large content. Never quote whole files or command dumps back to
+  the user; reference the few lines that matter.
+- Keep final responses brief: what changed or was found, any blockers, and the
+  single most useful next step only when needed.
 
 ## Files and Shell
 
-- Interpret relative paths from the current working directory.
-- Prefer structured file tools for reading and writing known files.
-- Use shell commands for discovery, tests, build steps, and operations that are
-  easier or safer through the shell.
-- For long-running or interactive commands, use a non-interactive form whenever
-  possible and explain the limitation if the command times out.
+- Relative paths resolve against the current working directory.
+- Prefer the structured file tools for reading and writing known, normal-sized
+  files; prefer the shell for discovery, filtering, tests, and build steps.
+- Shell commands time out after 30 seconds and must be non-interactive: pass
+  flags like `--yes`/`--no-input` where appropriate, and explain the
+  limitation if a command cannot fit these constraints.
 
 ## Computer-Use Delegation
 
-Use `use_computer` only for tasks that require interacting with the
-graphical desktop: clicking, typing into apps, navigating windows, reading
-visual UI state, or verifying something that only appears on screen.
+`use_computer` spawns a fresh, stateless subagent on every call — it remembers
+nothing from previous delegations, and each delegation re-pays the full cost
+of screenshots. So:
 
-Before delegating, gather any useful non-visual context yourself. Send the
-computer-use subagent a compact, self-contained instruction that includes:
-
-- the exact goal and success criteria;
-- the app, window, website, or visible UI target if known;
-- relevant text, paths, credentials placeholders, or constraints;
-- actions to avoid, especially destructive, privacy-sensitive, or paid actions;
-- what evidence you need back, such as visible confirmation text.
-
-After the subagent returns, use its result to answer the user. If the subagent
-reports uncertainty, a blocker, or a need for confirmation, surface that clearly
-instead of guessing.
+- Delegate only what genuinely requires the graphical desktop: clicking,
+  typing into apps, reading visual UI state, or verifying something that only
+  appears on screen. Do every file- or shell-reachable part yourself first.
+- Bundle one desktop task into ONE delegation instead of several narrow
+  sequential calls; do not micro-manage the GUI step by step.
+- Make the query self-contained: the exact goal and success criteria; the app,
+  window, or site; relevant text, paths, or constraints; actions to avoid
+  (destructive, privacy-sensitive, paid); and what evidence to report back.
+- If the subagent reports uncertainty, a blocker, or a need for confirmation,
+  surface that clearly instead of guessing.
 
 ## User Memory
 
@@ -125,14 +153,14 @@ def get_system_info() -> tuple[str]:
 @tool
 async def read_file(path: Path, runtime: ToolRuntime[RuntimeContext]) -> str:
     """
-    Read the contents of the file at the specified path.
+    Read the entire contents of the file at the specified path. For
+    potentially large files, prefer a shell command that extracts only the
+    relevant part instead.
 
     Args:
         path:
-            Path to the file to be read. By default, this is interpreted as a
-            relative path to the current working directory. Use the
-            appropriate root path prefix to specify an absolute path (`C:\\` on
-            Windows, `/` on Unix-based systems).
+            Path to the file to read. Relative paths resolve against the
+            current working directory.
 
     Returns:
         Contents of the file as a string
@@ -150,15 +178,14 @@ async def write_file(
     path: Path, contents: str, runtime: ToolRuntime[RuntimeContext]
 ):
     """
-    Write to the file at the specified path. This will overwrite any existing
-    data in the file.
+    Write to the file at the specified path, replacing any existing contents.
+    Raises on failure, so a normal return means the write succeeded — no need
+    to read the file back.
 
     Args:
         path:
-            Path to the file to be written to. By default, this is interpreted
-            as a relative path to the current working directory. Use the
-            appropriate root path prefix to specify an absolute path (`C:\\` on
-            Windows, `/` on Unix-based systems).
+            Path of the file to write. Relative paths resolve against the
+            current working directory.
         contents:
             New contents to be written to the file.
     """
@@ -173,14 +200,13 @@ async def write_file(
 @tool
 def list_dir(path: Path, runtime: ToolRuntime[RuntimeContext]) -> list[str]:
     """
-    List the files in directory at the specified path.
+    List the file and directory names directly inside the specified
+    directory.
 
     Args:
         path:
-            Path to the directory. By default, this is interpreted as a
-            relative path to the current working directory. Use the
-            appropriate root path prefix to specify an absolute path (`C:\\` on
-            Windows, `/` on Unix-based systems).
+            Path of the directory to list. Relative paths resolve against the
+            current working directory.
 
     Return:
         A list of file and directory names in the specified directory
@@ -197,10 +223,12 @@ def shell_command(
     cmd: str, runtime: ToolRuntime[RuntimeContext]
 ) -> str | tuple[str, str]:
     """
-    Execute a shell command on the user's system at the current working
-    directory. A timeout of 30s exists for any command executed.
+    Execute a non-interactive shell command at the current working directory.
+    A timeout of 30s exists for any command executed.
 
-    Always run non-interactive versions of commands whenever possible.
+    Filter potentially long output (e.g. `| head -50`, `grep`) so results
+    stay small, and chain related steps with `&&` in one call when the
+    combined output stays small.
 
     Args:
         cmd: The shell command to execute.
@@ -242,19 +270,22 @@ async def write_user_memory(memory: str):
     """
 
     async with aiofiles.open(USER_MEMORY_PATH, "w") as f:
-        await f.write(memory)
+        await f.write(memory[:100])
 
 
 @tool
 async def use_computer(query: str) -> list[ContentBlock]:
     """
-    Create an ephemeral subagent to handle computer-use tasks. Use relevant
-    context to describe what you want the agent to do on the user's computer.
+    Delegate a visual desktop task to a fresh computer-use subagent. The
+    subagent is stateless — it remembers nothing from previous calls — so
+    make the query fully self-contained and bundle the whole desktop task
+    into one call.
 
     Args:
         query:
-            A natural language query describing the task you want the agent
-            to perform.
+            Natural-language description of the complete desktop task: goal
+            and success criteria, app/site, relevant text or paths, actions
+            to avoid, and what evidence to report back.
     """
 
     computer_agent = create_computer_use_agent()
