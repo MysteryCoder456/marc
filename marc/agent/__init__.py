@@ -14,7 +14,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from marc.dirs import DIRS
 
-from .computer import create_computer_use_agent
+from .computer import ComputerContext, create_computer_use_agent
 
 
 @dataclass
@@ -290,7 +290,8 @@ async def use_computer(query: str) -> list[ContentBlock]:
 
     computer_agent = create_computer_use_agent()
     result = await computer_agent.ainvoke(
-        {"messages": [{"role": "user", "content": query}]}
+        {"messages": [{"role": "user", "content": query}]},
+        context=ComputerContext(),
     )
     final_msg: AnyMessage = result["messages"][-1]
     return final_msg.content_blocks
