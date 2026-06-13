@@ -168,19 +168,16 @@ def move_mouse(
     x: int,
     y: int,
     runtime: ToolRuntime[ComputerContext],
-    delta: bool = False,
 ):
     """
     Moves the cursor to the specified screen coordinates on the user's screen.
     Coordinates are in the pixel space of the latest screenshot (which is
     downscaled before being shown to you); they are scaled back up to the
-    native screen resolution before being applied. If `delta` is `True`, x and
-    y are treated as offsets relative to the mouse's current position.
+    native screen resolution before being applied.
 
     Args:
         x: X-coordinate to move the mouse to.
         y: Y-coordinate to move the mouse to.
-        delta: Whether to treat `position` as a relative offset.
     """
 
     factor = runtime.context.scale_factor
@@ -188,11 +185,7 @@ def move_mouse(
     sy = round(y * factor)
 
     controller = MouseController()
-
-    if delta:
-        controller.move(sx, sy)
-    else:
-        controller.position = (sx, sy)
+    controller.position = (sx, sy)
 
 
 @tool
