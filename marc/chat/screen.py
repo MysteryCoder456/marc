@@ -5,7 +5,9 @@ from uuid import UUID
 from langchain_core.messages import (
     AnyMessage,
 )
-from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
+from langgraph.graph.state import (
+    CompiledStateGraph,  # pyright: ignore[reportMissingTypeStubs]
+)
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import VerticalGroup, VerticalScroll
