@@ -140,7 +140,7 @@ def take_screenshot(
     original_width, original_height = img.size
     if original_width > TARGET_WIDTH:
         target_height = round(original_height * TARGET_WIDTH / original_width)
-        img = img.resize((TARGET_WIDTH, target_height), Image.LANCZOS)
+        img = img.resize((TARGET_WIDTH, target_height), Image.LANCZOS)  # pyright: ignore[reportAttributeAccessIssue]
         runtime.context.scale_factor = original_width / TARGET_WIDTH
     else:
         runtime.context.scale_factor = 1.0

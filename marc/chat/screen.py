@@ -81,15 +81,9 @@ class ChatScreen(Screen):
         ):
             return
 
-        # Save chat
-        save_coro = self.run_worker(
-            partial(ChatStorage.save_chat, self.session),
-            thread=True,
-        ).wait()
-
-        # Save STM
+        # Save chat and STM
+        save_coro = ChatStorage.save_chat(self.session)
         stm_coro = ShortTermMemory.save(self.session)
-
         await asyncio.gather(save_coro, stm_coro)
 
     async def watch_session(self, session: ChatSession):

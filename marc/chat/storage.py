@@ -2,6 +2,7 @@ import string
 from typing import Any, final
 from uuid import UUID, uuid4
 
+from anyio import Path
 from langchain_core.messages import (
     AnyMessage,
     messages_from_dict,
@@ -39,14 +40,14 @@ class ChatSession(BaseModel):
 
 @final
 class ChatStorage:
-    CHATS_PATH = DIRS.user_data_path / "chats"
+    CHATS_PATH = Path(DIRS.user_data_path / "chats")
 
     @classmethod
-    def _ensure_paths(cls):
-        cls.CHATS_PATH.mkdir(exist_ok=True)
+    async def _ensure_paths(cls):
+        await cls.CHATS_PATH.mkdir(exist_ok=True)
 
     @classmethod
-    def list_chats(cls) -> list[ChatSession]:
+    async def list_chats(cls) -> list[ChatSession]:
         """
         List all the chats stored on disk.
 
@@ -54,20 +55,23 @@ class ChatStorage:
             A list of `ChatSession`s without their `messages` field populated.
         """
 
-        cls._ensure_paths()
+        await cls._ensure_paths()
 
-        paths = list(cls.CHATS_PATH.glob("*.json"))
-        paths.sort(key=lambda p: p.stat().st_ctime, reverse=True)
+        paths = [
+            (path, (await path.stat()).st_ctime)
+            async for path in cls.CHATS_PATH.glob("*.json")
+        ]
+        paths.sort(key=lambda pair: pair[1], reverse=True)
         return [
             ChatSession(
                 id=UUID(path.stem.split("+")[0]),
                 name=path.stem.split("+")[1].replace("_", " "),
             )
-            for path in paths
+            for path, _ in paths
         ]
 
     @classmethod
-    def load_chat(cls, chat_id: UUID) -> ChatSession | None:
+    async def load_chat(cls, chat_id: UUID) -> ChatSession | None:
         """
         Loads a chat session from disk.
 
@@ -79,17 +83,17 @@ class ChatStorage:
             exists.
         """
 
-        cls._ensure_paths()
+        await cls._ensure_paths()
         paths = cls.CHATS_PATH.glob(f"{chat_id}+*.json")
 
-        if chat_path := next(paths):
-            chat_json = chat_path.read_text()
+        if chat_path := await anext(paths):
+            chat_json = await chat_path.read_text()
             return ChatSession.model_validate_json(chat_json)
 
         return None
 
     @classmethod
-    def save_chat(cls, chat: ChatSession):
+    async def save_chat(cls, chat: ChatSession):
         """
         Saves a chat session to disk.
 
@@ -97,7 +101,7 @@ class ChatStorage:
             chat: The chat session to save.
         """
 
-        cls._ensure_paths()
+        await cls._ensure_paths()
 
         # Sanitize chat name
         if chat.name:
@@ -115,4 +119,4 @@ class ChatStorage:
         # Save to disk
         chat_path = cls.CHATS_PATH / f"{chat.id}+{safe_name}.json"
         chat_json = chat.model_dump_json()
-        chat_path.write_text(chat_json)
+        await chat_path.write_text(chat_json)

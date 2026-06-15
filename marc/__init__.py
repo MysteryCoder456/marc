@@ -31,8 +31,7 @@ class ChatListProvider(Provider):
 
     @override
     async def startup(self) -> None:
-        worker = self.app.run_worker(ChatStorage.list_chats, thread=True)
-        self.chats = await worker.wait()
+        self.chats = await ChatStorage.list_chats()
 
     @override
     async def search(self, query: str) -> Hits:
