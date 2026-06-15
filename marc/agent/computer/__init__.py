@@ -1,10 +1,11 @@
 import io
 from asyncio import sleep
 from base64 import b64encode
+from dataclasses import dataclass
 from typing import Annotated, Literal
 
 from langchain.agents import create_agent
-from langchain.tools import InjectedToolCallId, tool
+from langchain.tools import InjectedToolCallId, ToolRuntime, tool
 from langchain_core.messages import ToolMessage
 from langchain_core.messages.content import create_image_block
 from langchain_openai import ChatOpenAI
@@ -15,6 +16,19 @@ from pynput.mouse import Button
 from pynput.mouse import Controller as MouseController
 
 from .modifier_key import MODIFIER_KEY_MAP, ModifierKey
+
+# Screenshots are downscaled to this width (preserving aspect ratio) before
+# being sent to the model, so the model works in a smaller coordinate space.
+TARGET_WIDTH = 1024
+
+
+@dataclass
+class ComputerContext:
+    # Native screenshot width / TARGET_WIDTH for the most recent screenshot.
+    # take_screenshot sets it; move_mouse uses it to map the model's
+    # (downscaled-image-space) coordinates back to native screen pixels.
+    scale_factor: float = 1.0
+
 
 SYSTEM_PROMPT = """# Computer-Use Subagent System Prompt
 
@@ -106,6 +120,7 @@ At most two short sentences, addressed to the main agent:
 @tool
 def take_screenshot(
     tool_call_id: Annotated[str, InjectedToolCallId],
+    runtime: ToolRuntime[ComputerContext],
 ) -> ToolMessage:
     """
     Takes a screenshot of the user's desktop and returns it as a base64
@@ -117,8 +132,20 @@ def take_screenshot(
         monitor = sct.monitors[1]
         sct_img = sct.grab(monitor)
 
-    # Save image data into a buffer
     img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+
+    # Downscale to TARGET_WIDTH (never upscale) so the model receives a
+    # smaller image, and record how much it was shrunk so move_mouse can map
+    # the model's coordinates back to native screen pixels.
+    original_width, original_height = img.size
+    if original_width > TARGET_WIDTH:
+        target_height = round(original_height * TARGET_WIDTH / original_width)
+        img = img.resize((TARGET_WIDTH, target_height), Image.LANCZOS)
+        runtime.context.scale_factor = original_width / TARGET_WIDTH
+    else:
+        runtime.context.scale_factor = 1.0
+
+    # Save image data into a buffer
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=65, optimize=True)
     img_bytes = buf.getvalue()
@@ -140,25 +167,25 @@ def take_screenshot(
 def move_mouse(
     x: int,
     y: int,
-    delta: bool = False,
+    runtime: ToolRuntime[ComputerContext],
 ):
     """
     Moves the cursor to the specified screen coordinates on the user's screen.
-    If `delta` is `True`, x and y are treated as offsets relative to the
-    mouse's current position.
+    Coordinates are in the pixel space of the latest screenshot (which is
+    downscaled before being shown to you); they are scaled back up to the
+    native screen resolution before being applied.
 
     Args:
         x: X-coordinate to move the mouse to.
         y: Y-coordinate to move the mouse to.
-        delta: Whether to treat `position` as a relative offset.
     """
 
-    controller = MouseController()
+    factor = runtime.context.scale_factor
+    sx = round(x * factor)
+    sy = round(y * factor)
 
-    if delta:
-        controller.move(x, y)
-    else:
-        controller.position = (x, y)
+    controller = MouseController()
+    controller.position = (sx, sy)
 
 
 @tool
@@ -246,6 +273,7 @@ def create_computer_use_agent():
     agent = create_agent(
         model=model,
         system_prompt=SYSTEM_PROMPT,
+        context_schema=ComputerContext,
         tools=[
             take_screenshot,
             move_mouse,

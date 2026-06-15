@@ -14,7 +14,7 @@ from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 
-from .computer import create_computer_use_agent
+from .computer import ComputerContext, create_computer_use_agent
 from .memory import ShortTermMemory, UserMemory
 
 
@@ -304,7 +304,8 @@ async def use_computer(query: str) -> list[ContentBlock]:
 
     computer_agent = create_computer_use_agent()
     result = await computer_agent.ainvoke(
-        {"messages": [{"role": "user", "content": query}]}
+        {"messages": [{"role": "user", "content": query}]},
+        context=ComputerContext(),
     )
     final_msg: AnyMessage = result["messages"][-1]
     return final_msg.content_blocks
