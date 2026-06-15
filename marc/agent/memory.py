@@ -10,9 +10,17 @@ from marc.chat.storage import ChatSession
 from marc.dirs import DIRS
 
 
+@final
 class UserMemory:
-    # TODO: Migrate from agent.py
-    ...
+    USER_MEMORY_PATH = Path(DIRS.user_data_path / "USER.md")
+
+    @classmethod
+    async def write(cls, memory: str):
+        await cls.USER_MEMORY_PATH.write_text(memory)
+
+    @classmethod
+    async def read(cls) -> str:
+        return await cls.USER_MEMORY_PATH.read_text()
 
 
 @final

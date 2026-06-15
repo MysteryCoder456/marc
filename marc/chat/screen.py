@@ -1,9 +1,9 @@
 import asyncio
 from functools import partial
-from pathlib import Path
 from typing import final, override
 from uuid import UUID
 
+from anyio import Path
 from langchain_core.messages import (
     AnyMessage,
 )
@@ -163,7 +163,7 @@ class ChatScreen(Screen):
             {"messages": query_messages},
             {"configurable": {"thread_id": self.chat_id}},
             stream_mode="values",
-            context=RuntimeContext(cwd=Path.cwd()),
+            context=RuntimeContext(cwd=await Path.cwd()),
         )
         async for chunk in response:
             chunk_msgs = chunk["messages"]

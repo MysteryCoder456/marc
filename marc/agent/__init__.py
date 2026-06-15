@@ -1,11 +1,11 @@
+import asyncio
 import os
 import platform
 import subprocess
 from dataclasses import dataclass
-from pathlib import Path
 from string import Template
 
-import aiofiles
+from anyio import Path
 from langchain.agents import create_agent
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import AnyMessage, ContentBlock
@@ -13,18 +13,14 @@ from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 
-from marc.dirs import DIRS
-
 from .computer import create_computer_use_agent
-from .memory import ShortTermMemory
+from .memory import ShortTermMemory, UserMemory
 
 
 @dataclass
 class RuntimeContext:
     cwd: Path
 
-
-USER_MEMORY_PATH = DIRS.user_data_path / "USER.md"
 
 SYSTEM_PROMPT_TEMPLATE = Template("""# Marc System Prompt
 
@@ -181,8 +177,7 @@ async def read_file(path: Path, runtime: ToolRuntime[RuntimeContext]) -> str:
     if not path.is_absolute():
         path = runtime.context.cwd / path
 
-    async with aiofiles.open(path, "r") as f:
-        return await f.read()
+    return await path.read_text()
 
 
 @tool
@@ -205,12 +200,13 @@ async def write_file(
     if not path.is_absolute():
         path = runtime.context.cwd / path
 
-    async with aiofiles.open(path, "w") as f:
-        await f.write(contents)
+    await path.write_text(contents)
 
 
 @tool
-def list_dir(path: Path, runtime: ToolRuntime[RuntimeContext]) -> list[str]:
+async def list_dir(
+    path: Path, runtime: ToolRuntime[RuntimeContext]
+) -> list[str]:
     """
     List the file and directory names directly inside the specified
     directory.
@@ -227,7 +223,7 @@ def list_dir(path: Path, runtime: ToolRuntime[RuntimeContext]) -> list[str]:
     if not path.is_absolute():
         path = runtime.context.cwd / path
 
-    return os.listdir(path)
+    return [item.name async for item in path.glob("*")]
 
 
 @tool
@@ -281,8 +277,7 @@ async def write_user_memory(memory: str):
         memory: New complete user memory (durable facts only, under 100 words).
     """
 
-    async with aiofiles.open(USER_MEMORY_PATH, "w") as f:
-        await f.write(memory)
+    await UserMemory.write(memory)
 
 
 @tool
@@ -309,24 +304,17 @@ async def use_computer(query: str) -> list[ContentBlock]:
 
 
 async def create_new_agent() -> Runnable:
-    # Session memory
-    memory = InMemorySaver()
-
-    # Load user memory
-    if USER_MEMORY_PATH.exists():
-        async with aiofiles.open(USER_MEMORY_PATH, "r") as f:
-            user_memory = await f.read()
-    else:
-        user_memory = "*(empty — nothing saved yet)*"
-
-    # Load short-term memory
-    short_term_memory = await ShortTermMemory.read()
+    # Create/load memories
+    working_memory = InMemorySaver()
+    user_memory, short_term_memory = await asyncio.gather(
+        UserMemory.read(), ShortTermMemory.read()
+    )
+    # TODO: Long-term memory
 
     system_prompt = SYSTEM_PROMPT_TEMPLATE.substitute(
         user_memory=user_memory,
         short_term_memory=short_term_memory,
     )
-
     model = ChatOpenAI(
         model="gpt-5.4-mini",
         reasoning={"effort": "medium", "summary": "auto"},
@@ -334,7 +322,7 @@ async def create_new_agent() -> Runnable:
     agent = create_agent(
         model=model,
         system_prompt=system_prompt,
-        checkpointer=memory,
+        checkpointer=working_memory,
         context_schema=RuntimeContext,
         tools=[  # TODO: tool to change CWD
             get_system_info,
