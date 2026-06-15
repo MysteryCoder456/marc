@@ -1,11 +1,13 @@
+import asyncio
+from functools import partial
 from pathlib import Path
-from typing import Any, final, override
+from typing import final, override
 from uuid import UUID
 
 from langchain_core.messages import (
     AnyMessage,
 )
-from langgraph.graph.state import CompiledStateGraph  # pyright: ignore[reportMissingTypeStubs]
+from langchain_core.runnables import Runnable
 from textual import on, work
 from textual.app import ComposeResult
 from textual.containers import VerticalGroup, VerticalScroll
@@ -17,6 +19,7 @@ from textual.worker import Worker, WorkerState
 
 from marc.agent import RuntimeContext, create_new_agent
 from marc.agent.chat_name import generate_chat_name
+from marc.agent.memory import ShortTermMemory
 
 from .indicator import RunningIndicator
 from .message import ChatMessage
@@ -42,7 +45,8 @@ class ChatScreen(Screen):
         self.chat_id = chat_id
         self.is_context_loaded = True
         self.added_messages: set[str] = set()
-        self.agent: CompiledStateGraph[Any, Any]  # pyright: ignore[reportExplicitAny]
+
+        self.agent: Runnable
 
     def scroll_to_end(self):
         scroller = self.query_one("#chat-scroll-area")
@@ -71,15 +75,22 @@ class ChatScreen(Screen):
         self.query_one("#chat-input").focus()
 
     async def on_unmount(self):
+        # Don't do anything if conversation state hasn't changed
         if not (
             self.chat_id and self.session.messages and self.is_context_loaded
         ):
             return
 
-        def save_work():
-            ChatStorage.save_chat(self.session)
+        # Save chat
+        save_coro = self.run_worker(
+            partial(ChatStorage.save_chat, self.session),
+            thread=True,
+        ).wait()
 
-        await self.run_worker(save_work, thread=True).wait()
+        # Save STM
+        stm_coro = ShortTermMemory.save(self.session)
+
+        await asyncio.gather(save_coro, stm_coro)
 
     async def watch_session(self, session: ChatSession):
         # Find newly added messages

@@ -9,12 +9,14 @@ import aiofiles
 from langchain.agents import create_agent
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import AnyMessage, ContentBlock
+from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 
 from marc.dirs import DIRS
 
 from .computer import create_computer_use_agent
+from .memory import ShortTermMemory
 
 
 @dataclass
@@ -134,6 +136,16 @@ existing fact worth keeping.
 - Update when the user shares something new and durable, corrects you, or an
   existing memory proves wrong or stale — delete stale entries rather than
   appending corrections.
+
+## Short-Term Memory
+
+Auto-maintained daily log of today's chat sessions. Written when each
+session ends — you cannot write to it; use it as read-only context about
+what the user has been doing today.
+
+Each entry: session name, then bullet facts.
+
+$short_term_memory
 """)
 
 
@@ -270,7 +282,7 @@ async def write_user_memory(memory: str):
     """
 
     async with aiofiles.open(USER_MEMORY_PATH, "w") as f:
-        await f.write(memory[:100])
+        await f.write(memory)
 
 
 @tool
@@ -296,18 +308,24 @@ async def use_computer(query: str) -> list[ContentBlock]:
     return final_msg.content_blocks
 
 
-async def create_new_agent():
-    # Short-term memory
+async def create_new_agent() -> Runnable:
+    # Session memory
     memory = InMemorySaver()
 
-    # Load long-term user memory
+    # Load user memory
     if USER_MEMORY_PATH.exists():
         async with aiofiles.open(USER_MEMORY_PATH, "r") as f:
             user_memory = await f.read()
     else:
-        user_memory = "*(empty — nothing saved about the user yet)*"
+        user_memory = "*(empty — nothing saved yet)*"
 
-    system_prompt = SYSTEM_PROMPT_TEMPLATE.substitute(user_memory=user_memory)
+    # Load short-term memory
+    short_term_memory = await ShortTermMemory.read()
+
+    system_prompt = SYSTEM_PROMPT_TEMPLATE.substitute(
+        user_memory=user_memory,
+        short_term_memory=short_term_memory,
+    )
 
     model = ChatOpenAI(
         model="gpt-5.4-mini",
