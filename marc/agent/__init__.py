@@ -3,9 +3,10 @@ import os
 import platform
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from string import Template
 
-from anyio import Path
+from anyio import Path as AsyncPath
 from langchain.agents import create_agent
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import AnyMessage, ContentBlock
@@ -19,7 +20,7 @@ from .memory import ShortTermMemory, UserMemory
 
 @dataclass
 class RuntimeContext:
-    cwd: Path
+    cwd: AsyncPath
 
 
 SYSTEM_PROMPT_TEMPLATE = Template("""# Marc System Prompt
@@ -174,10 +175,12 @@ async def read_file(path: Path, runtime: ToolRuntime[RuntimeContext]) -> str:
         Contents of the file as a string
     """
 
-    if not path.is_absolute():
-        path = runtime.context.cwd / path
+    async_path = AsyncPath(path)
 
-    return await path.read_text()
+    if not async_path.is_absolute():
+        async_path = runtime.context.cwd / async_path
+
+    return await async_path.read_text()
 
 
 @tool
@@ -197,10 +200,12 @@ async def write_file(
             New contents to be written to the file.
     """
 
-    if not path.is_absolute():
-        path = runtime.context.cwd / path
+    async_path = AsyncPath(path)
 
-    await path.write_text(contents)
+    if not async_path.is_absolute():
+        async_path = runtime.context.cwd / async_path
+
+    await async_path.write_text(contents)
 
 
 @tool
@@ -220,10 +225,12 @@ async def list_dir(
         A list of file and directory names in the specified directory
     """
 
-    if not path.is_absolute():
-        path = runtime.context.cwd / path
+    async_path = AsyncPath(path)
 
-    return [item.name async for item in path.glob("*")]
+    if not async_path.is_absolute():
+        async_path = runtime.context.cwd / async_path
+
+    return [item.name async for item in async_path.glob("*")]
 
 
 @tool
