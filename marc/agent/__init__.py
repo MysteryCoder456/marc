@@ -97,10 +97,10 @@ Four tools are available, ordered from cheapest to most expensive. Always
 start at the top and only go deeper if the result doesn't answer the
 question:
 
-1. **`TavilySearch`** — web search returning snippets and URLs. Use first for
+1. **`tavily_search`** (`TavilySearch`) — web search returning snippets and URLs. Use first for
    any factual query, recent information, or documentation lookup. Snippets
    are small; try this before extracting full pages.
-2. **`TavilyExtract`** — fetches the full content of one or more URLs.
+2. **`tavily_extract`** (`TavilyExtract`) — fetches the full content of one or more URLs.
    Use only when search snippets are insufficient and you already know the
    target URL (e.g. from search results or the user). Accepts multiple URLs
    in one call — batch them.
