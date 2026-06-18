@@ -19,7 +19,7 @@ from .modifier_key import MODIFIER_KEY_MAP, ModifierKey
 
 # Screenshots are downscaled to this width (preserving aspect ratio) before
 # being sent to the model, so the model works in a smaller coordinate space.
-TARGET_WIDTH = 1024
+TARGET_WIDTH = 1280
 
 
 @dataclass
