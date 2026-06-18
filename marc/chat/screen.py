@@ -58,15 +58,13 @@ class ChatScreen(Screen):
         # Initialize agent
         self.agent = await create_new_agent()
 
-        if self.chat_id:  # Open existing chat
-
-            def load_work():
-                return ChatStorage.load_chat(self.chat_id)  # pyright: ignore[reportArgumentType]
-
-            self.session = await self.run_worker(load_work, thread=True).wait()
+        if self.chat_id and (ses := await ChatStorage.load_chat(self.chat_id)):
+            # Open existing chat
+            self.session = ses
             self.is_context_loaded = False
 
-        else:  # Open new chat
+        else:
+            # Open new chat
             self.chat_id = self.session.id
 
         self.app.post_message(ChatScreen.Loaded(self.chat_id))
@@ -164,7 +162,7 @@ class ChatScreen(Screen):
             new_msgs = chunk_msgs[next_msg_idx:]
 
             self.session.messages.extend(new_msgs)
-            self.mutate_reactive(ChatScreen.session)
+            self.mutate_reactive(ChatScreen.session)  # pyright: ignore[reportArgumentType]
 
             next_msg_idx = len(chunk_msgs)
 
