@@ -12,6 +12,12 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import AnyMessage, ContentBlock
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
+from langchain_tavily import (
+    TavilyCrawl,
+    TavilyExtract,
+    TavilyMap,
+    TavilySearch,
+)
 from langgraph.checkpoint.memory import InMemorySaver
 
 from .computer import ComputerContext, create_computer_use_agent
@@ -340,6 +346,10 @@ async def create_new_agent() -> Runnable:
             shell_command,
             write_user_memory,
             use_computer,
+            TavilyCrawl(),
+            TavilyExtract(),
+            TavilyMap(),
+            TavilySearch(),
         ],
         # middleware=[AnthropicPromptCachingMiddleware()],
     )
