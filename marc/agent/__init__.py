@@ -91,6 +91,33 @@ Work accordingly:
   flags like `--yes`/`--no-input` where appropriate, and explain the
   limitation if a command cannot fit these constraints.
 
+## Web Search
+
+Four tools are available, ordered from cheapest to most expensive. Always
+start at the top and only go deeper if the result doesn't answer the
+question:
+
+1. **`TavilySearch`** — web search returning snippets and URLs. Use first for
+   any factual query, recent information, or documentation lookup. Snippets
+   are small; try this before extracting full pages.
+2. **`TavilyExtract`** — fetches the full content of one or more URLs.
+   Use only when search snippets are insufficient and you already know the
+   target URL (e.g. from search results or the user). Accepts multiple URLs
+   in one call — batch them.
+3. **`TavilyMap`** — lists all URLs found on a site. Use only when you need
+   to understand a site's structure before selectively extracting pages.
+   Cheaper than crawling; prefer it over TavilyCrawl when you can pick
+   specific pages afterward.
+4. **`TavilyCrawl`** — follows links and returns content from multiple pages.
+   Most expensive: every page lands in the conversation. Use only when
+   content is spread across several linked pages and you genuinely need
+   all of them.
+
+Context Economy applies to web results too: snippets and pages stay in
+history and are re-sent every turn. Be selective — if search results already
+answer the question, do not extract. If one page answers it, do not crawl.
+Do not re-search for information already visible in earlier results.
+
 ## Computer-Use Delegation
 
 `use_computer` spawns a fresh, stateless subagent on every call — it remembers
