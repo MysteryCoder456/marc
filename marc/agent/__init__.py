@@ -12,6 +12,12 @@ from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import AnyMessage, ContentBlock
 from langchain_core.runnables import Runnable
 from langchain_openai import ChatOpenAI
+from langchain_tavily import (
+    TavilyCrawl,
+    TavilyExtract,
+    TavilyMap,
+    TavilySearch,
+)
 from langgraph.checkpoint.memory import InMemorySaver
 
 from .computer import ComputerContext, create_computer_use_agent
@@ -84,6 +90,33 @@ Work accordingly:
 - Shell commands time out after 30 seconds and must be non-interactive: pass
   flags like `--yes`/`--no-input` where appropriate, and explain the
   limitation if a command cannot fit these constraints.
+
+## Web Search
+
+Four tools are available, ordered from cheapest to most expensive. Always
+start at the top and only go deeper if the result doesn't answer the
+question:
+
+1. **`tavily_search`** (`TavilySearch`) — web search returning snippets and URLs. Use first for
+   any factual query, recent information, or documentation lookup. Snippets
+   are small; try this before extracting full pages.
+2. **`tavily_extract`** (`TavilyExtract`) — fetches the full content of one or more URLs.
+   Use only when search snippets are insufficient and you already know the
+   target URL (e.g. from search results or the user). Accepts multiple URLs
+   in one call — batch them.
+3. **`tavily_map`** (`TavilyMap`) — lists all URLs found on a site. Use only when you need
+   to understand a site's structure before selectively extracting pages.
+   Cheaper than crawling; prefer it over TavilyCrawl when you can pick
+   specific pages afterward.
+4. **`tavily_crawl`** (`TavilyCrawl`) — follows links and returns content from multiple pages.
+   Most expensive: every page lands in the conversation. Use only when
+   content is spread across several linked pages and you genuinely need
+   all of them.
+
+Context Economy applies to web results too: snippets and pages stay in
+history and are re-sent every turn. Be selective — if search results already
+answer the question, do not extract. If one page answers it, do not crawl.
+Do not re-search for information already visible in earlier results.
 
 ## Computer-Use Delegation
 
@@ -340,6 +373,10 @@ async def create_new_agent() -> Runnable:
             shell_command,
             write_user_memory,
             use_computer,
+            TavilyCrawl(),
+            TavilyExtract(),
+            TavilyMap(),
+            TavilySearch(),
         ],
         # middleware=[AnthropicPromptCachingMiddleware()],
     )
