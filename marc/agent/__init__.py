@@ -357,8 +357,8 @@ async def create_new_agent() -> Runnable:
         short_term_memory=short_term_memory,
     )
     model = ChatOpenAI(
-        model="gpt-5.4-mini",
-        reasoning={"effort": "medium", "summary": "auto"},
+        model="gpt-5.4",
+        reasoning={"effort": "medium", "summary": "concise"},
     )
     agent = create_agent(
         model=model,

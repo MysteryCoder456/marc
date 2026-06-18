@@ -266,7 +266,7 @@ async def wait(seconds: float):
 
 def create_computer_use_agent():
     model = ChatOpenAI(
-        model="gpt-5.4",
+        model="gpt-5.4-mini",
         use_responses_api=True,
         reasoning={"effort": "none"},
     )
