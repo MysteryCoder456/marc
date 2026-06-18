@@ -104,11 +104,11 @@ question:
    Use only when search snippets are insufficient and you already know the
    target URL (e.g. from search results or the user). Accepts multiple URLs
    in one call — batch them.
-3. **`TavilyMap`** — lists all URLs found on a site. Use only when you need
+3. **`tavily_map`** (`TavilyMap`) — lists all URLs found on a site. Use only when you need
    to understand a site's structure before selectively extracting pages.
    Cheaper than crawling; prefer it over TavilyCrawl when you can pick
    specific pages afterward.
-4. **`TavilyCrawl`** — follows links and returns content from multiple pages.
+4. **`tavily_crawl`** (`TavilyCrawl`) — follows links and returns content from multiple pages.
    Most expensive: every page lands in the conversation. Use only when
    content is spread across several linked pages and you genuinely need
    all of them.
