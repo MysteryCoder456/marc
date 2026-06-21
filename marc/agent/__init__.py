@@ -90,12 +90,16 @@ Work accordingly:
 - Shell commands time out after 30 seconds and must be non-interactive: pass
   flags like `--yes`/`--no-input` where appropriate, and explain the
   limitation if a command cannot fit these constraints.
+- Never fetch web pages or call HTTP APIs from the shell (`curl`, `wget`,
+  `httpie`, etc.). Use the Web Search tools below for anything on the
+  internet — they handle rendering, extraction, and result size for you.
 
 ## Web Search
 
-Four tools are available, ordered from cheapest to most expensive. Always
-start at the top and only go deeper if the result doesn't answer the
-question:
+These tools are the only way to retrieve web content — never reach for a
+shell command instead. Four tools are available, ordered from cheapest to
+most expensive. Always start at the top and only go deeper if the result
+doesn't answer the question:
 
 1. **`tavily_search`** (`TavilySearch`) — web search returning snippets and URLs. Use first for
    any factual query, recent information, or documentation lookup. Snippets
@@ -273,6 +277,9 @@ def shell_command(
     """
     Execute a non-interactive shell command at the current working directory.
     A timeout of 30s exists for any command executed.
+
+    Do not use this to fetch web pages or call HTTP APIs (no `curl`, `wget`,
+    etc.) — use the Tavily web search tools for anything on the internet.
 
     Filter potentially long output (e.g. `| head -50`, `grep`) so results
     stay small, and chain related steps with `&&` in one call when the
