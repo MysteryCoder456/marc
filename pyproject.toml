@@ -12,6 +12,7 @@ dependencies = [
     "langchain-google-genai>=4.2.4",
     "langchain-openai>=1.2.1",
     "langchain-tavily>=0.2.18",
+    "mem0ai>=2.0.7",
     "mss>=10.2.0",
     "pillow>=12.2.0",
     "platformdirs>=4.9.6",

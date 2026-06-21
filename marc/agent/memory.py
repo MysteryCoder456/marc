@@ -1,13 +1,17 @@
-from typing import final
+from datetime import datetime
+from typing import TYPE_CHECKING, ClassVar, final
 
 from anyio import Path
 from langchain.agents import create_agent
+from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AnyMessage
-from langchain_openai import ChatOpenAI
+from mem0 import AsyncMemoryClient  # pyright: ignore[reportMissingTypeStubs]
 from pydantic import BaseModel
 
-from marc.chat.storage import ChatSession
 from marc.dirs import DIRS
+
+if TYPE_CHECKING:
+    from marc.chat.storage import ChatSession
 
 
 @final
@@ -37,23 +41,49 @@ class ShortTermMemory:
     async def _generate_chat_summary(
         cls, messages: list[AnyMessage]
     ) -> list[str]:
-        model = ChatOpenAI(model="gpt-5.4-nano", reasoning={"effort": "none"})
+        model = ChatAnthropic(
+            model="claude-sonnet-4-6",  # pyright: ignore[reportCallIssue]
+            effort="medium",
+            temperature=0.4,
+        )
+        system_prompt = (
+            "Summarize this conversation as bullet points for a daily activity log.\n\n"
+            "Include:\n"
+            "- Decisions made\n"
+            "- Tasks completed\n"
+            "- Specific outputs (text, code, commands, file paths)\n"
+            "- Unresolved issues\n\n"
+            "Omit:\n"
+            "- Small talk\n"
+            "- Failed attempts that were corrected\n"
+            "- Specific details about the user (those are stored elsewhere)"
+            "- Anything not worth recalling tomorrow"
+        )
         agent = create_agent(
             model=model,
-            system_prompt="Summarize this conversation as bullet points for a daily activity log. Include: decisions made, tasks completed, specific outputs (text, code, commands, file paths), unresolved issues. Omit small talk, failed attempts that were corrected, and anything not worth recalling tomorrow.",
+            system_prompt=system_prompt,
             response_format=cls.ChatSummaryOutput,
         )
 
-        response = await agent.ainvoke({"messages": messages})  # pyright: ignore[reportArgumentType]
+        response = await agent.ainvoke(
+            {
+                "messages": messages
+                + [{"role": "user", "content": "Summarize this conversation."}]
+            }
+        )
         return response["structured_response"].summary
 
     @classmethod
     async def _reconcile_summaries(
-        cls, session: ChatSession, summary: list[str]
+        cls, session: "ChatSession", summary: list[str]
     ) -> str:
         current_summaries = await cls.read()
 
-        model = ChatOpenAI(model="gpt-5.4-nano", reasoning={"effort": "none"})
+        model = ChatAnthropic(
+            model="claude-sonnet-4-6",  # pyright: ignore[reportCallIssue]
+            effort="medium",
+            temperature=0.4,
+        )
         system_prompt = (
             "You maintain a daily activity log. Each session entry uses this format:\n\n"
             "**<session name>** (ID: <id>)\n"
@@ -89,14 +119,9 @@ class ShortTermMemory:
         return response["structured_response"].new_summaries
 
     @classmethod
-    async def save(cls, session: ChatSession):
-        # Generate a summary of the session
+    async def save(cls, session: "ChatSession"):
         summary = await cls._generate_chat_summary(session.messages)
-
-        # Reconcile with existing session facts
         new_summaries = await cls._reconcile_summaries(session, summary)
-
-        # Write to disk
         await cls.TODAY_PATH.write_text(new_summaries)
 
     @classmethod
@@ -104,3 +129,47 @@ class ShortTermMemory:
         if await cls.TODAY_PATH.exists():
             return await cls.TODAY_PATH.read_text()
         return "*(empty — nothing saved yet)*"
+
+    @classmethod
+    async def delete(cls):
+        await cls.TODAY_PATH.unlink()
+
+
+@final
+class LongTermMemory:
+    client: ClassVar[AsyncMemoryClient]
+
+    @classmethod
+    def init(cls):
+        """
+        Initialize Mem0 client. Meant to be called after environment
+        variables have been loaded.
+        """
+
+        cls.client = AsyncMemoryClient()
+
+    @classmethod
+    async def should_dream(cls) -> bool:
+        stm_path = ShortTermMemory.TODAY_PATH
+
+        if not await stm_path.exists():
+            # Nothing to consolidate
+            return False
+
+        stm_ctime = (await stm_path.stat()).st_ctime
+        stm_changed = datetime.fromtimestamp(stm_ctime)
+
+        today = datetime.now().date()
+        today_midnight = datetime.combine(today, datetime.min.time())
+
+        # Whether STM was changed yesterday
+        return stm_changed < today_midnight
+
+    @classmethod
+    async def dream(cls):
+        stm = await ShortTermMemory.read()
+        await cls.client.add(
+            f"Here's a summary of our conversations from yesterday. Disregard information specifically about the user; only remember conversation/task details.\n\n{stm}",
+            app_id="cv.rehatsingh.marc",
+        )
+        await ShortTermMemory.delete()
