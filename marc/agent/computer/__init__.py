@@ -6,10 +6,12 @@ from typing import Annotated, Literal
 
 from langchain.agents import create_agent
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
-from langchain_core.messages import ToolMessage
+from langchain_anthropic import ChatAnthropic
+from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
+from langchain_core.messages import ImageContentBlock, ToolMessage
 from langchain_core.messages.content import create_image_block
 from langchain_openai import ChatOpenAI
-from mss import MSS
+from mss import MSS, ScreenShot
 from PIL import Image
 from pynput.keyboard import Controller as KeyboardController
 from pynput.mouse import Button
@@ -25,7 +27,7 @@ TARGET_WIDTH = 1280
 @dataclass
 class ComputerContext:
     # Native screenshot width / TARGET_WIDTH for the most recent screenshot.
-    # take_screenshot sets it; move_mouse uses it to map the model's
+    # take_screenshot sets it; click_mouse uses it to map the model's
     # (downscaled-image-space) coordinates back to native screen pixels.
     scale_factor: float = 1.0
 
@@ -54,9 +56,19 @@ verified outcome with as few tool calls as possible.
   enter), in-app search (cmd+F), menu shortcuts, tab/arrow navigation, enter
   to submit, esc to dismiss.
 - Think silently; do not narrate plans or intermediate observations.
-- Start with one screenshot. Reuse it for every target it still proves; take
-  a new one only when an action changed the UI in a way you must see, before
-  a risky confirmation, or for final evidence.
+- The user may have multiple screens, numbered from 1. `take_screenshot`
+  captures one screen when given a `screen_number`, or every screen in a
+  single call when given none — request all only when needed, never one
+  call per screen.
+  - Request all screens when screenshot context could be missing or stale:
+    your first screenshot of the task, or right after an action that could
+    open a new window or app, since either could land on any screen.
+  - Otherwise default to the single screen you already know holds the
+    target.
+  - If you're unsure how many screens exist, request all.
+- Reuse the latest screenshot for every target it still proves; take a new
+  one only when an action changed the UI in a way you must see, before a
+  risky confirmation, or for final evidence.
 - Run an obvious low-risk sequence from one stable screenshot one action per
   turn without re-shooting between steps: focus field, type, press enter is
   three turns and zero extra screenshots.
@@ -76,13 +88,19 @@ verified outcome with as few tool calls as possible.
   result.
 - After two failed attempts at the same target, stop and report the blocker.
 
-## Mouse and Keyboard
+## Mouse, Keyboard, and Screens
 
-- Estimate coordinates from screenshot landmarks; click directly when the
-  target is clear. For precise or risky targets, move first, then click.
-- If a click lands visibly offset from its target, the screenshot is likely
-  captured at a higher pixel density than the pointer coordinate space:
-  divide your coordinates by 2 (the typical HiDPI factor) and retry once.
+- `click_mouse` moves the cursor to the given coordinates and clicks in one
+  call — there is no separate move step, so estimate coordinates from
+  screenshot landmarks and click directly in a single call.
+- Pass coordinates exactly as seen in the screenshot you're reading; the
+  tool rescales them to native screen pixels internally. Do not adjust them
+  yourself (e.g. for HiDPI) — that double-scales and causes a miss.
+- Pass the `screen_number` (1-indexed) of the screenshot the coordinates
+  came from — if that screenshot covered every screen, identify which one
+  shows the target first.
+- If a click misses, take a fresh screenshot before retrying — don't reuse
+  coordinates estimated from a stale image.
 - Prefer single clicks. Double-click, right-click, and drag only when the UI
   clearly requires them.
 - Ensure the intended field, app, or control is focused before typing.
@@ -121,82 +139,82 @@ At most two short sentences, addressed to the main agent:
 def take_screenshot(
     tool_call_id: Annotated[str, InjectedToolCallId],
     runtime: ToolRuntime[ComputerContext],
+    screen_number: int | None = None,
 ) -> ToolMessage:
     """
-    Takes a screenshot of the user's desktop and returns it as a base64
-    encoded image.
+    Takes screenshots of the user's desktops and returns them as base64
+    encoded images. The user could have one or multiple screens.
+
+    Args:
+        screen_number:
+            Which screen to take a screenshot of. First is 1, second is 2, etc.
+            Pass `None` to get all screens.
     """
 
+    # Grab screenshot(s)
     with MSS() as sct:
-        # Grab screenshot
-        monitor = sct.monitors[1]
-        sct_img = sct.grab(monitor)
+        if screen_number:
+            monitors = [sct.monitors[screen_number]]
+        else:
+            monitors = sct.monitors[1:]
 
-    img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
+        sct_imgs: list[ScreenShot] = [
+            sct.grab(monitor) for monitor in monitors
+        ]
 
-    # Downscale to TARGET_WIDTH (never upscale) so the model receives a
-    # smaller image, and record how much it was shrunk so move_mouse can map
-    # the model's coordinates back to native screen pixels.
-    original_width, original_height = img.size
-    if original_width > TARGET_WIDTH:
-        target_height = round(original_height * TARGET_WIDTH / original_width)
-        img = img.resize((TARGET_WIDTH, target_height), Image.LANCZOS)  # pyright: ignore[reportAttributeAccessIssue]
-        runtime.context.scale_factor = original_width / TARGET_WIDTH
-    else:
-        runtime.context.scale_factor = 1.0
+    def convert(sct_img: ScreenShot) -> ImageContentBlock:
+        img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
 
-    # Save image data into a buffer
-    buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=65, optimize=True)
-    img_bytes = buf.getvalue()
+        # Downscale to TARGET_WIDTH (never upscale) so the model receives a
+        # smaller image, and record how much it was shrunk so click_mouse can map
+        # the model's coordinates back to native screen pixels.
+        original_width, original_height = img.size
+        if original_width > TARGET_WIDTH:
+            target_height = round(
+                original_height * TARGET_WIDTH / original_width
+            )
+            img = img.resize((TARGET_WIDTH, target_height), Image.LANCZOS)  # pyright: ignore[reportAttributeAccessIssue]
+            runtime.context.scale_factor = original_width / TARGET_WIDTH
+        else:
+            runtime.context.scale_factor = 1.0
+
+        # Save image data into a buffer
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", optimize=True)
+        img_bytes = buf.getvalue()
+
+        return create_image_block(
+            base64=b64encode(img_bytes).decode("utf-8"),
+            mime_type="image/jpeg",
+            detail="original",
+        )
 
     return ToolMessage(
-        content_blocks=[
-            create_image_block(
-                base64=b64encode(img_bytes).decode("utf-8"),
-                mime_type="image/jpeg",
-                detail="original",
-            ),
-        ],
+        content_blocks=[convert(img) for img in sct_imgs],
         name=take_screenshot.name,
         tool_call_id=tool_call_id,
     )
 
 
 @tool
-def move_mouse(
+async def click_mouse(
+    runtime: ToolRuntime[ComputerContext],
+    screen_number: int,
     x: int,
     y: int,
-    runtime: ToolRuntime[ComputerContext],
-):
-    """
-    Moves the cursor to the specified screen coordinates on the user's screen.
-    Coordinates are in the pixel space of the latest screenshot (which is
-    downscaled before being shown to you); they are scaled back up to the
-    native screen resolution before being applied.
-
-    Args:
-        x: X-coordinate to move the mouse to.
-        y: Y-coordinate to move the mouse to.
-    """
-
-    factor = runtime.context.scale_factor
-    sx = round(x * factor)
-    sy = round(y * factor)
-
-    controller = MouseController()
-    controller.position = (sx, sy)
-
-
-@tool
-def click_mouse(
     button: Literal["left", "middle", "right"] = "left",
     count: int = 1,
 ):
     """
-    Clicks on the user's screen at the cursor's current position.
+    Moves the cursor to the specified screen coordinates on the user's screen
+    and clicks. Coordinates are in the pixel space of the latest screenshot
+    (which is downscaled before being shown to you); they are scaled back up
+    to the native screen resolution before being applied.
 
     Args:
+        screen_number: Which screen to click on. First is 1, second is 2, etc.
+        x: X-coordinate to move the mouse to.
+        y: Y-coordinate to move the mouse to.
         button: Which mouse button to click with. Default is `Button.left`.
         count: How many times to click. Default is `1`.
     """
@@ -207,7 +225,19 @@ def click_mouse(
         "right": Button.right,
     }
 
+    factor = runtime.context.scale_factor
+    sx = round(x * factor)
+    sy = round(y * factor)
+
+    # Adjust for screen arrangement
+    with MSS() as sct:
+        monitor = sct.monitors[screen_number]
+        sx += monitor["left"]
+        sy += monitor["top"]
+
     controller = MouseController()
+    controller.position = (sx, sy)
+    await sleep(0.5)
     controller.click(buttons[button], count)
 
 
@@ -269,18 +299,29 @@ def create_computer_use_agent():
         model="gpt-5.4-mini",
         use_responses_api=True,
         reasoning={"effort": "none"},
+        temperature=0.5,
     )
+    # model = ChatAnthropic(
+    #     model="claude-haiku-4-5",  # pyright: ignore[reportCallIssue]
+    #     effort="low",
+    #     temperature=0.5,
+    # )
+
+    middleware = []
+    if isinstance(model, ChatAnthropic):
+        middleware.extend([AnthropicPromptCachingMiddleware()])
+
     agent = create_agent(
         model=model,
         system_prompt=SYSTEM_PROMPT,
         context_schema=ComputerContext,
         tools=[
             take_screenshot,
-            move_mouse,
             click_mouse,
             type_keyboard,
             press_key,
             wait,
         ],
+        middleware=middleware,
     )
     return agent
