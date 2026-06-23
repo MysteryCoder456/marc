@@ -1,0 +1,14 @@
+Screen {
+    align: center middle;
+}
+
+.grr {
+    width: 50w;
+    height: 1;
+    text-align: center;
+}
+
+ZZZ {
+    text-style: italic;
+    color: dimgray;
+}

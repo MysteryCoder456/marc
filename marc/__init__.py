@@ -9,11 +9,11 @@ from textual.app import App, SystemCommand
 from textual.command import CommandPalette, DiscoveryHit, Hit, Hits, Provider
 from textual.screen import Screen
 from textual.widgets import Static
-from textual.worker import Worker, WorkerState
 
 from marc.agent.memory import LongTermMemory
 from marc.chat.screen import ChatScreen
 from marc.chat.storage import ChatSession, ChatStorage
+from marc.dream.screen import DreamModeScreen
 
 
 class Smiley(Static):
@@ -85,9 +85,9 @@ class MarcApp(App):
         LongTermMemory.init()
 
         if await LongTermMemory.should_dream():
-            self.run_worker(LongTermMemory.dream(), name="dreamer")
-
-        self.open_chat()
+            self.push_screen(DreamModeScreen())
+        else:
+            self.open_chat()
 
     def action_new_chat(self):
         self.open_chat()
@@ -97,19 +97,9 @@ class MarcApp(App):
             CommandPalette([ChatListProvider], placeholder="Search for chats…")
         )
 
-    @on(Worker.StateChanged)
-    def on_dreamer_state_changed(self, event: Worker.StateChanged):
-        if event.worker.name != "dreamer":
-            return
-
-        match event.state:
-            # TODO: Dream mode indicator
-            case WorkerState.RUNNING:
-                self.log("Entering dream mode 😴")
-            case WorkerState.SUCCESS:
-                self.log("Finished dreaming 🥱")
-            case _:
-                pass
+    @on(DreamModeScreen.FinishedDreaming)
+    def on_finished_dreaming(self, _event: DreamModeScreen.FinishedDreaming):
+        self.open_chat()
 
     @on(ChatScreen.Loaded)
     def on_chat_loaded(self, event: ChatScreen.Loaded):
