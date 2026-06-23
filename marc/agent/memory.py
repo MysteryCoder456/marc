@@ -56,7 +56,7 @@ class ShortTermMemory:
             "Omit:\n"
             "- Small talk\n"
             "- Failed attempts that were corrected\n"
-            "- Specific details about the user (those are stored elsewhere)"
+            "- Specific details about the user (those are stored elsewhere)\n"
             "- Anything not worth recalling tomorrow"
         )
         agent = create_agent(
