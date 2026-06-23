@@ -66,19 +66,20 @@ Work accordingly:
   shell commands.
 - Keep tool results small. `read_file` returns the whole file: for files that
   may be large (logs, datasets, lock files, build output), check size first
-  (`wc -l`, `ls -lh`) and extract only the relevant part with `head`, `tail`,
-  `grep -n`, or `sed -n 'START,ENDp'`.
-- Cap shell output. Filter anything potentially long (`| head -50`, `grep`,
-  quiet flags); never run a command that dumps unbounded output into the
-  conversation. Chain related steps with `&&` in one call when the combined
-  output stays small.
+  and read only the relevant slice rather than the whole file — use the
+  size/peek/search commands for your platform under Files and Shell › Shell
+  Environment.
+- Cap shell output. Filter anything potentially long (the per-platform
+  filtering commands under Shell Environment, plus quiet flags); never run a
+  command that dumps unbounded output into the conversation. Chain related
+  steps with `&&` in one call when the combined output stays small.
 - Do not re-fetch what you already have. Earlier results stay visible to you:
   do not re-read unchanged files, re-list unchanged directories, or re-run
   commands just to confirm remembered output.
 - Trust your writes. A failed `write_file` surfaces as a tool error, and the
   new content is already in the conversation as your tool-call arguments —
   never read a file back just to verify a write. Verify outcomes with the
-  cheapest sufficient signal (exit code, one targeted `grep`), not full
+  cheapest sufficient signal (exit code, one targeted search), not full
   re-reads.
 - Do not echo large content. Never quote whole files or command dumps back to
   the user; reference the few lines that matter.
@@ -87,7 +88,8 @@ Work accordingly:
 
 ## Files and Shell
 
-- Relative paths resolve against the current working directory.
+- Relative paths resolve against the current working directory; use
+  `change_dir` to move it instead of prefixing every command with `cd`.
 - Prefer the structured file tools for reading and writing known, normal-sized
   files; prefer the shell for discovery, filtering, tests, and build steps.
 - Shell commands time out after 30 seconds and must be non-interactive: pass
@@ -96,6 +98,10 @@ Work accordingly:
 - Never fetch web pages or call HTTP APIs from the shell (`curl`, `wget`,
   `httpie`, etc.). Use the Web Search tools below for anything on the
   internet — they handle rendering, extraction, and result size for you.
+
+### Shell Environment
+
+$shell_environment
 
 ## Web Search
 
@@ -210,6 +216,42 @@ rest of the chat, so:
 """)
 
 
+def _build_shell_environment() -> str:
+    """
+    Describe the shell that `shell_command` runs through, with the
+    output-filtering idioms that actually work there. Injected into the system
+    prompt so the agent uses the right dialect for the current OS.
+    """
+
+    if os.name == "nt":
+        return (
+            "`shell_command` runs through cmd.exe on Windows, which is not a "
+            "POSIX shell — `head`, `tail`, `grep`, `sed`, `wc`, and `ls` are "
+            "unavailable. Prefer the structured file tools (`read_file`, "
+            "`list_dir`) for plain reads and listings, and use these to keep "
+            "shell output small:\n"
+            "- size / listing: `dir FILE`\n"
+            "- search in files: `findstr /n PATTERN FILE`\n"
+            '- line count: `find /c /v "" < FILE`\n'
+            "- first N lines: `powershell -NoProfile -Command \"Get-Content "
+            'FILE -TotalCount N"`\n'
+            "- last N lines: `powershell -NoProfile -Command \"Get-Content "
+            'FILE -Tail N"`\n'
+            "- line range: `powershell -NoProfile -Command \"Get-Content "
+            'FILE | Select-Object -Skip <n> -First <count>"`\n'
+            "- discard output with `>nul`; chain steps with `&&` as usual.\n"
+            "When cmd.exe is awkward, run one "
+            '`powershell -NoProfile -Command "..."` call instead.'
+        )
+
+    return (
+        f"`shell_command` runs through your login shell on {platform.system()}"
+        ", a POSIX shell. Keep output small with the usual Unix idioms: size "
+        "with `wc -l` / `ls -lh`; slice with `head`, `tail`, `grep -n`, or "
+        "`sed -n 'START,ENDp'`; chain with `&&`."
+    )
+
+
 @tool
 def get_system_info() -> tuple[str]:
     """
@@ -298,6 +340,41 @@ async def list_dir(
 
 
 @tool
+async def change_dir(
+    path: Path, runtime: ToolRuntime[RuntimeContext]
+) -> str:
+    """
+    Change the working directory that the file and shell tools resolve
+    relative paths against. The change persists for the rest of the session
+    (or until changed again), so prefer this over prefixing commands with
+    `cd`.
+
+    Args:
+        path:
+            Directory to switch to. Relative paths resolve against the current
+            working directory; a leading `~` expands to the home directory.
+
+    Returns:
+        The new absolute working directory.
+    """
+
+    async_path = AsyncPath(path).expanduser()
+
+    if not async_path.is_absolute():
+        async_path = runtime.context.cwd / async_path
+
+    async_path = await async_path.resolve()
+
+    if not await async_path.is_dir():
+        raise NotADirectoryError(
+            f"Not a directory (missing or not a folder): {async_path}"
+        )
+
+    runtime.context.cwd = async_path
+    return str(async_path)
+
+
+@tool
 def shell_command(
     cmd: str, runtime: ToolRuntime[RuntimeContext]
 ) -> str | tuple[str, str]:
@@ -320,20 +397,37 @@ def shell_command(
         or the string `TIMEOUT` if the command timed out.
     """
 
-    # TODO: handle Windows case
-
-    user_shell = os.getenv("SHELL") or "/bin/bash"
-
+    # The agent emits POSIX-style commands, so route them through a shell.
+    # Windows has no `/bin/bash`, so use the command processor there instead.
     try:
-        result = subprocess.run(
-            [user_shell, "-i", "-c", cmd],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            cwd=runtime.context.cwd,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        if os.name == "nt":
+            # `COMSPEC` is the path to cmd.exe; `/c` runs the command and
+            # exits. CREATE_NEW_PROCESS_GROUP detaches the child from the
+            # console's Ctrl-C group — the Windows analogue of
+            # start_new_session — so a timeout kill or a user interrupt of the
+            # TUI doesn't propagate up to Marc.
+            result = subprocess.run(
+                [os.environ.get("COMSPEC", "cmd.exe"), "/c", cmd],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=runtime.context.cwd,
+                stdin=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+        else:
+            # Run the user's login shell interactively so their profile
+            # (PATH, aliases) is loaded; detach it into its own session.
+            user_shell = os.getenv("SHELL") or "/bin/bash"
+            result = subprocess.run(
+                [user_shell, "-i", "-c", cmd],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=runtime.context.cwd,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
         return result.stdout, result.stderr
 
     except subprocess.TimeoutExpired:
@@ -422,6 +516,7 @@ async def create_new_agent() -> Runnable:
     system_prompt = SYSTEM_PROMPT_TEMPLATE.substitute(
         user_memory=user_memory,
         short_term_memory=short_term_memory,
+        shell_environment=_build_shell_environment(),
     )
     model = ChatOpenAI(
         model="gpt-5.4",
@@ -432,11 +527,12 @@ async def create_new_agent() -> Runnable:
         system_prompt=system_prompt,
         checkpointer=working_memory,
         context_schema=RuntimeContext,
-        tools=[  # TODO: tool to change CWD
+        tools=[
             get_system_info,
             read_file,
             write_file,
             list_dir,
+            change_dir,
             shell_command,
             write_user_memory,
             search_long_term_memory,
