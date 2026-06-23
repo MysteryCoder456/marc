@@ -1,9 +1,7 @@
 import asyncio
-from functools import partial
 from typing import final, override
 from uuid import UUID
 
-from anyio import Path
 from langchain_core.messages import (
     AnyMessage,
 )
@@ -17,7 +15,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input
 from textual.worker import Worker, WorkerState
 
-from marc.agent import RuntimeContext, create_new_agent
+from marc.agent import RuntimeContext, create_runtime_context, create_new_agent
 from marc.agent.chat_name import generate_chat_name
 from marc.agent.memory import ShortTermMemory
 
@@ -45,6 +43,7 @@ class ChatScreen(Screen):
         self.chat_id = chat_id
         self.is_context_loaded = True
         self.added_messages: set[str] = set()
+        self.agent_runtime: RuntimeContext
 
         self.agent: Runnable
 
@@ -57,6 +56,7 @@ class ChatScreen(Screen):
     async def on_mount(self):
         # Initialize agent
         self.agent = await create_new_agent()
+        self.agent_runtime = await create_runtime_context()
 
         if self.chat_id and (ses := await ChatStorage.load_chat(self.chat_id)):
             # Open existing chat
@@ -155,7 +155,7 @@ class ChatScreen(Screen):
             {"messages": query_messages},
             {"configurable": {"thread_id": self.chat_id}},
             stream_mode="values",
-            context=RuntimeContext(cwd=await Path.cwd()),
+            context=self.agent_runtime,
         )
         async for chunk in response:
             chunk_msgs = chunk["messages"]

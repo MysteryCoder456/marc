@@ -10,7 +10,10 @@ from textual.command import CommandPalette, DiscoveryHit, Hit, Hits, Provider
 from textual.screen import Screen
 from textual.widgets import Static
 
-from marc.chat import ChatScreen, ChatSession, ChatStorage
+from marc.agent.memory import LongTermMemory
+from marc.chat.screen import ChatScreen
+from marc.chat.storage import ChatSession, ChatStorage
+from marc.dream.screen import DreamModeScreen
 
 
 class Smiley(Static):
@@ -78,8 +81,13 @@ class MarcApp(App):
         else:
             self.switch_screen(screen)
 
-    def on_mount(self):
-        self.open_chat()
+    async def on_mount(self):
+        LongTermMemory.init()
+
+        if await LongTermMemory.should_dream():
+            self.push_screen(DreamModeScreen())
+        else:
+            self.open_chat()
 
     def action_new_chat(self):
         self.open_chat()
@@ -88,6 +96,10 @@ class MarcApp(App):
         self.push_screen(
             CommandPalette([ChatListProvider], placeholder="Search for chats…")
         )
+
+    @on(DreamModeScreen.FinishedDreaming)
+    def on_finished_dreaming(self, _event: DreamModeScreen.FinishedDreaming):
+        self.open_chat()
 
     @on(ChatScreen.Loaded)
     def on_chat_loaded(self, event: ChatScreen.Loaded):
