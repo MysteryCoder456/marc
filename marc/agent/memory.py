@@ -156,8 +156,8 @@ class LongTermMemory:
             # Nothing to consolidate
             return False
 
-        stm_ctime = (await stm_path.stat()).st_ctime
-        stm_changed = datetime.fromtimestamp(stm_ctime)
+        stm_mtime = (await stm_path.stat()).st_mtime
+        stm_changed = datetime.fromtimestamp(stm_mtime)
 
         today = datetime.now().date()
         today_midnight = datetime.combine(today, datetime.min.time())

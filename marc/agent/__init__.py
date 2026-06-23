@@ -378,7 +378,6 @@ async def search_long_term_memory(
         query, filters={"app_id": "cv.rehatsingh.marc"}
     )
     memories = result["results"]
-    print(memories)
     return memories
 
 
