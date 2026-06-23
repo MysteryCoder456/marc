@@ -110,7 +110,7 @@ class ShortTermMemory:
             {
                 "messages": [
                     {
-                        "role": "human",
+                        "role": "user",
                         "content": f"**{session.name}** (ID: {session.id})\n{formatted_summary}",
                     }
                 ]
@@ -132,7 +132,7 @@ class ShortTermMemory:
 
     @classmethod
     async def delete(cls):
-        await cls.TODAY_PATH.unlink()
+        await cls.TODAY_PATH.unlink(missing_ok=True)
 
 
 @final
