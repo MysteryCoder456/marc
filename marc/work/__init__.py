@@ -22,11 +22,12 @@ def main():
     )
 
     with dpg.window(tag="Work Mode"):  # pyright: ignore[reportGeneralTypeIssues]
-        dpg.add_text(":-|", tag="face")
-
-        with dpg.group():  # pyright: ignore[reportGeneralTypeIssues]
-            dpg.add_button(label="Foo", tag="foo", callback=face_changer)
-            dpg.add_button(label="Bar", tag="bar", callback=face_changer)
+        with dpg.draw_layer(tag="face"):  # pyright: ignore[reportGeneralTypeIssues]
+            dpg.draw_line((10, 10), (60, 10), thickness=3)
+            dpg.draw_line((10, 60), (60, 60), thickness=3)
+            dpg.draw_bezier_quadratic(
+                (110, 0), (160, 35), (110, 70), thickness=3
+            )
 
     dpg.setup_dearpygui()
     dpg.show_viewport()
