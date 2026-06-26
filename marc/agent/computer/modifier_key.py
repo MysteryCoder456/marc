@@ -1,6 +1,6 @@
 from typing import final
 
-from aenum import MultiValueEnum  # pyright: ignore[reportMissingTypeStubs]
+from aenum import MultiValueEnum
 from pynput.keyboard import Key
 
 

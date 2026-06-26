@@ -20,7 +20,7 @@ from langchain_tavily import (
     TavilySearch,
 )
 from langgraph.checkpoint.memory import InMemorySaver
-from mem0 import AsyncMemoryClient  # pyright: ignore[reportMissingTypeStubs]
+from mem0 import AsyncMemoryClient
 
 from .computer import ComputerContext, create_computer_use_agent
 from .memory import ShortTermMemory, UserMemory
