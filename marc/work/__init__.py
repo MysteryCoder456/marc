@@ -18,6 +18,7 @@ def main():
         width=400,
         height=300,
         # decorated=False,
+        always_on_top=True,
     )
 
     with dpg.window(tag="Work Mode"):  # pyright: ignore[reportGeneralTypeIssues]
