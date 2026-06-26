@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "aenum>=3.1.17",
     "anyio>=4.13.0",
+    "dearpygui>=2.3.1",
     "langchain>=1.2.17",
     "langchain-anthropic>=1.4.3",
     "langchain-google-genai>=4.2.4",
@@ -29,13 +30,14 @@ dev = [
 ]
 
 [tool.pyright]
+reportAny = false
 reportUnknownArgumentType = false
 reportUnknownVariableType = false
 reportUnknownMemberType = false
 reportUnknownParameterType = false
 reportUnusedCallResult = false
 reportMissingTypeArgument = false
-reportAny = false
+reportMissingTypeStubs = false
 
 [tool.ruff]
 line-length = 79

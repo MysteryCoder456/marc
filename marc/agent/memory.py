@@ -5,7 +5,7 @@ from anyio import Path
 from langchain.agents import create_agent
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AnyMessage
-from mem0 import AsyncMemoryClient  # pyright: ignore[reportMissingTypeStubs]
+from mem0 import AsyncMemoryClient
 from pydantic import BaseModel
 
 from marc.dirs import DIRS
