@@ -27,6 +27,7 @@ dependencies = [
 dev = [
     "ruff>=0.15.12",
     "textual-dev>=1.8.0",
+    "watchfiles>=1.2.0",
 ]
 
 [tool.pyright]
