@@ -1,4 +1,4 @@
-from . import main
+from . import WorkOverlay
 
 if __name__ == "__main__":
-    main()
+    WorkOverlay().render_loop()
