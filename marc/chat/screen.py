@@ -1,4 +1,5 @@
 import asyncio
+from asyncio.subprocess import Process
 from typing import final, override
 from uuid import UUID
 
@@ -15,7 +16,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input
 from textual.worker import Worker, WorkerState
 
-from marc.agent import RuntimeContext, create_runtime_context, create_new_agent
+from marc.agent import RuntimeContext, create_new_agent, create_runtime_context
 from marc.agent.chat_name import generate_chat_name
 from marc.agent.memory import ShortTermMemory
 
@@ -33,9 +34,15 @@ class ChatScreen(Screen):
             self.chat_id = chat_id
 
     CSS_PATH = "styles.tcss"
+    BINDINGS = [
+        ("ctrl+o", "toggle_work_mode", "Toggle Work Mode"),
+    ]
 
     session = reactive(ChatSession, init=False)
-    is_agent_running = reactive(False)
+    is_agent_running = reactive(False, init=False)
+    overlay_process: reactive[Process | None] = reactive(
+        default=None, init=False
+    )
 
     def __init__(self, chat_id: UUID | None = None) -> None:
         super().__init__()
@@ -43,13 +50,36 @@ class ChatScreen(Screen):
         self.chat_id = chat_id
         self.is_context_loaded = True
         self.added_messages: set[str] = set()
-        self.agent_runtime: RuntimeContext
 
         self.agent: Runnable
+        self.agent_runtime: RuntimeContext
 
     def scroll_to_end(self):
         scroller = self.query_one("#chat-scroll-area")
         scroller.scroll_end(animate=False)
+
+    async def start_overlay(self):
+        self.overlay_process = await asyncio.create_subprocess_exec(
+            "python",
+            "-m",
+            "marc.work",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.PIPE,
+        )
+        self.await_overlay_close()
+
+    async def close_overlay(self):
+        if not self.overlay_process:
+            return
+
+        self.overlay_process.terminate()
+
+        try:
+            await asyncio.wait_for(self.overlay_process.wait(), timeout=5)
+        except TimeoutError:
+            self.overlay_process.kill()
+            await self.overlay_process.wait()
 
     # ================ ↓ TEXTUAL FUNCTIONS ↓ ================
 
@@ -79,10 +109,11 @@ class ChatScreen(Screen):
         ):
             return
 
-        # Save chat and STM
+        # Clean up
         save_coro = ChatStorage.save_chat(self.session)
         stm_coro = ShortTermMemory.save(self.session)
-        await asyncio.gather(save_coro, stm_coro)
+        close_overlay_coro = self.close_overlay()
+        await asyncio.gather(save_coro, stm_coro, close_overlay_coro)
 
     async def watch_session(self, session: ChatSession):
         # Find newly added messages
@@ -109,6 +140,21 @@ class ChatScreen(Screen):
             indicator.show()
         else:
             indicator.hide()
+
+    def watch_overlay_process(self, process: Process | None):
+        if process:
+            # TODO: show work mode screen
+            ...
+        else:
+            # TODO: hide work mode screen
+            ...
+
+    async def action_toggle_work_mode(self):
+        if self.overlay_process:
+            await self.close_overlay()
+            return
+
+        await self.start_overlay()
 
     @on(Input.Submitted, "#chat-input")
     def on_chat_input_submitted(self, event: Input.Submitted):
@@ -138,7 +184,20 @@ class ChatScreen(Screen):
                 self.is_agent_running = False
                 self.scroll_to_end()
 
-    @work(name="agent_message", exclusive=True)
+    @work(name="await_overlay")
+    async def await_overlay_close(self):
+        """
+        Waits for the overlay to close and automatically mutates the relevant
+        internal state.
+        """
+
+        if not self.overlay_process:
+            return
+
+        await asyncio.wait_for(self.overlay_process.wait(), timeout=None)
+        self.overlay_process = None
+
+    @work(name="agent_message")
     async def send_message_to_agent(self, msg: str):
         # Construct query
         query_messages: list[AnyMessage | dict[str, str]] = [
@@ -149,7 +208,7 @@ class ChatScreen(Screen):
             query_messages = self.session.messages + query_messages
             self.is_context_loaded = True
 
-        # Stream agent responses
+        # Send message to agent
         next_msg_idx = len(self.session.messages)
         response = self.agent.astream(
             {"messages": query_messages},
@@ -157,14 +216,44 @@ class ChatScreen(Screen):
             stream_mode="values",
             context=self.agent_runtime,
         )
+
+        process_tx = None
+
+        # Stream agent responses
         async for chunk in response:
             chunk_msgs = chunk["messages"]
-            new_msgs = chunk_msgs[next_msg_idx:]
+            new_msgs: list[AnyMessage] = chunk_msgs[next_msg_idx:]
+
+            if self.overlay_process and self.overlay_process.stdin:
+                process_tx = self.overlay_process.stdin
+            else:
+                process_tx = None
+
+            # Send reasoning to overlay
+            if process_tx:
+                reasoning_text = ""
+                for block in new_msgs[-1].content_blocks:
+                    if block["type"] != "reasoning":
+                        continue
+
+                    block_reasoning = str(block.get("reasoning"))
+                    if reasoning_text:
+                        reasoning_text += f" {block_reasoning}"
+                    else:
+                        reasoning_text = block_reasoning
+
+                process_tx.write(f"[reasoning] {reasoning_text}\n".encode())
+                self.run_worker(process_tx.drain())
 
             self.session.messages.extend(new_msgs)
             self.mutate_reactive(ChatScreen.session)  # pyright: ignore[reportArgumentType]
 
             next_msg_idx = len(chunk_msgs)
+
+        # Signal to overlay that we're done
+        if process_tx:
+            process_tx.write(b"[done]\n")
+            self.run_worker(process_tx.drain())
 
         # Generate a name for this session
         if not self.session.name:
