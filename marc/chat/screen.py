@@ -113,7 +113,13 @@ class ChatScreen(Screen):
         save_coro = ChatStorage.save_chat(self.session)
         stm_coro = ShortTermMemory.save(self.session)
         close_overlay_coro = self.close_overlay()
-        await asyncio.gather(save_coro, stm_coro, close_overlay_coro)
+        clean_up = self.run_worker(
+            asyncio.gather(save_coro, stm_coro, close_overlay_coro)
+        )
+
+        # Wait for clean up if we're closing the app
+        if not self.app.is_running:
+            await clean_up.wait()
 
     async def watch_session(self, session: ChatSession):
         # Find newly added messages
