@@ -42,9 +42,8 @@ class ShortTermMemory:
         cls, messages: list[AnyMessage]
     ) -> list[str]:
         model = ChatAnthropic(
-            model="claude-sonnet-4-6",  # pyright: ignore[reportCallIssue]
+            model="claude-sonnet-5",  # pyright: ignore[reportCallIssue]
             effort="medium",
-            temperature=0.4,
         )
         system_prompt = (
             "Summarize this conversation as bullet points for a daily activity log.\n\n"
@@ -57,7 +56,9 @@ class ShortTermMemory:
             "- Small talk\n"
             "- Failed attempts that were corrected\n"
             "- Specific details about the user (those are stored elsewhere)\n"
-            "- Anything not worth recalling tomorrow"
+            "- Anything not worth recalling tomorrow\n\n"
+            "Be consistent and matter-of-fact — stick to what happened, without "
+            "embellishment or creative phrasing."
         )
         agent = create_agent(
             model=model,
@@ -80,9 +81,8 @@ class ShortTermMemory:
         current_summaries = await cls.read()
 
         model = ChatAnthropic(
-            model="claude-sonnet-4-6",  # pyright: ignore[reportCallIssue]
+            model="claude-sonnet-5",  # pyright: ignore[reportCallIssue]
             effort="medium",
-            temperature=0.4,
         )
         system_prompt = (
             "You maintain a daily activity log. Each session entry uses this format:\n\n"
@@ -97,6 +97,8 @@ class ShortTermMemory:
             "- Leave all other sessions exactly as they are.\n"
             "- If the current log is empty, return only the new entry.\n"
             "- Return the updated log only — no commentary.\n\n"
+            "Apply these rules consistently and deterministically — don't vary "
+            "formatting or phrasing between entries.\n\n"
             f"Current log:\n\n{current_summaries}"
         )
         agent = create_agent(
