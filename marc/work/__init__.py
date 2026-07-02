@@ -17,7 +17,7 @@ MUTED: tuple[int, int, int] = (120, 120, 120)
 @final
 class WorkOverlay:
     FONT_PATH = Path(__file__).parent / "MonaspiceKrNerdFont-Regular.otf"
-    VIEWPORT_SIZE = (400, 100)
+    VIEWPORT_SIZE = (400, 150)
     FRAMES = ""
     FRAME_DURATION = 0.1
 

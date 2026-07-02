@@ -180,20 +180,21 @@ class ChatScreen(Screen):
 
             # Send reasoning to overlay
             if wms:
-                reasoning_text = ""
+                reasonings = []
+
                 for block in new_msgs[-1].content_blocks:
                     if block["type"] != "reasoning":
                         continue
 
-                    block_reasoning = str(block.get("reasoning"))
-                    if reasoning_text:
-                        reasoning_text += f" {block_reasoning}"
-                    else:
-                        reasoning_text = block_reasoning
+                    block_reasoning = (
+                        str(block.get("reasoning")).replace("*", "").strip()
+                    )
+                    if block_reasoning:
+                        reasonings.append(block_reasoning)
 
-                reasoning_text = reasoning_text.strip("*").strip()
-                if reasoning_text:
-                    self.run_worker(wms.send_reasoning(reasoning_text))
+                if reasonings:
+                    reasoning = ", ".join(reasonings).capitalize()
+                    self.run_worker(wms.send_reasoning(reasoning))
 
             self.session.messages.extend(new_msgs)
             self.mutate_reactive(ChatScreen.session)  # pyright: ignore[reportArgumentType]
