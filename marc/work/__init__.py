@@ -17,7 +17,7 @@ MUTED: tuple[int, int, int] = (120, 120, 120)
 @final
 class WorkOverlay:
     FONT_PATH = Path(__file__).parent / "MonaspiceKrNerdFont-Regular.otf"
-    VIEWPORT_SIZE = (300, 200)
+    VIEWPORT_SIZE = (400, 100)
     FRAMES = ""
     FRAME_DURATION = 0.1
 
@@ -79,7 +79,6 @@ class WorkOverlay:
                     )
                     dpg.add_text(self.FRAMES[0], color=MUTED, tag="indicator")
 
-                    dpg.hide_item("reasoning")
                     dpg.hide_item("indicator")
 
     def _send_msg(self, data: str):
@@ -118,12 +117,10 @@ class WorkOverlay:
                 if msg.startswith("[reasoning]"):
                     reasoning = msg[11:].strip()
                     dpg.set_value("reasoning", reasoning)
-
-                    dpg.show_item("reasoning")
                     dpg.show_item("indicator")
 
                 elif msg.startswith("[done]"):
-                    dpg.hide_item("reasoning")
+                    dpg.set_value("reasoning", "Done!")
                     dpg.hide_item("indicator")
 
             self.frame_elapsed += dt
