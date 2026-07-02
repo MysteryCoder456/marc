@@ -1,5 +1,4 @@
 import asyncio
-from asyncio.subprocess import Process
 from typing import final, override
 from uuid import UUID
 
@@ -19,6 +18,7 @@ from textual.worker import Worker, WorkerState
 from marc.agent import RuntimeContext, create_new_agent, create_runtime_context
 from marc.agent.chat_name import generate_chat_name
 from marc.agent.memory import ShortTermMemory
+from marc.work.screen import WorkModeScreen
 
 from .indicator import RunningIndicator
 from .message import ChatMessage
@@ -35,14 +35,11 @@ class ChatScreen(Screen):
 
     CSS_PATH = "styles.tcss"
     BINDINGS = [
-        ("ctrl+o", "toggle_work_mode", "Toggle Work Mode"),
+        ("ctrl+o", "enable_work_mode", "Enable Work Mode"),
     ]
 
     session = reactive(ChatSession, init=False)
     is_agent_running = reactive(False, init=False)
-    overlay_process: reactive[Process | None] = reactive(
-        default=None, init=False
-    )
 
     def __init__(self, chat_id: UUID | None = None) -> None:
         super().__init__()
@@ -57,29 +54,6 @@ class ChatScreen(Screen):
     def scroll_to_end(self):
         scroller = self.query_one("#chat-scroll-area")
         scroller.scroll_end(animate=False)
-
-    async def start_overlay(self):
-        self.overlay_process = await asyncio.create_subprocess_exec(
-            "python",
-            "-m",
-            "marc.work",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            stdin=asyncio.subprocess.PIPE,
-        )
-        self.await_overlay_close()
-
-    async def close_overlay(self):
-        if not self.overlay_process:
-            return
-
-        self.overlay_process.terminate()
-
-        try:
-            await asyncio.wait_for(self.overlay_process.wait(), timeout=5)
-        except TimeoutError:
-            self.overlay_process.kill()
-            await self.overlay_process.wait()
 
     # ================ ↓ TEXTUAL FUNCTIONS ↓ ================
 
@@ -112,14 +86,11 @@ class ChatScreen(Screen):
         # Clean up
         save_coro = ChatStorage.save_chat(self.session)
         stm_coro = ShortTermMemory.save(self.session)
-        close_overlay_coro = self.close_overlay()
-        clean_up = self.run_worker(
-            asyncio.gather(save_coro, stm_coro, close_overlay_coro)
-        )
+        self.run_worker(asyncio.gather(save_coro, stm_coro))
 
-        # Wait for clean up if we're closing the app
+        # Wait for clean up if we're closing entire app
         if not self.app.is_running:
-            await clean_up.wait()
+            await self.workers.wait_for_complete()
 
     async def watch_session(self, session: ChatSession):
         # Find newly added messages
@@ -147,20 +118,8 @@ class ChatScreen(Screen):
         else:
             indicator.hide()
 
-    def watch_overlay_process(self, process: Process | None):
-        if process:
-            # TODO: show work mode screen
-            ...
-        else:
-            # TODO: hide work mode screen
-            ...
-
-    async def action_toggle_work_mode(self):
-        if self.overlay_process:
-            await self.close_overlay()
-            return
-
-        await self.start_overlay()
+    def action_enable_work_mode(self):
+        self.app.push_screen("work_mode")
 
     @on(Input.Submitted, "#chat-input")
     def on_chat_input_submitted(self, event: Input.Submitted):
@@ -190,19 +149,6 @@ class ChatScreen(Screen):
                 self.is_agent_running = False
                 self.scroll_to_end()
 
-    @work(name="await_overlay")
-    async def await_overlay_close(self):
-        """
-        Waits for the overlay to close and automatically mutates the relevant
-        internal state.
-        """
-
-        if not self.overlay_process:
-            return
-
-        await asyncio.wait_for(self.overlay_process.wait(), timeout=None)
-        self.overlay_process = None
-
     @work(name="agent_message")
     async def send_message_to_agent(self, msg: str):
         # Construct query
@@ -223,20 +169,17 @@ class ChatScreen(Screen):
             context=self.agent_runtime,
         )
 
-        process_tx = None
+        wms: WorkModeScreen | None = None
 
         # Stream agent responses
         async for chunk in response:
             chunk_msgs = chunk["messages"]
             new_msgs: list[AnyMessage] = chunk_msgs[next_msg_idx:]
 
-            if self.overlay_process and self.overlay_process.stdin:
-                process_tx = self.overlay_process.stdin
-            else:
-                process_tx = None
+            wms = self.app.get_screen("work_mode", WorkModeScreen)
 
             # Send reasoning to overlay
-            if process_tx:
+            if wms:
                 reasoning_text = ""
                 for block in new_msgs[-1].content_blocks:
                     if block["type"] != "reasoning":
@@ -248,8 +191,9 @@ class ChatScreen(Screen):
                     else:
                         reasoning_text = block_reasoning
 
-                process_tx.write(f"[reasoning] {reasoning_text}\n".encode())
-                self.run_worker(process_tx.drain())
+                reasoning_text = reasoning_text.strip("*").strip()
+                if reasoning_text:
+                    self.run_worker(wms.send_reasoning(reasoning_text))
 
             self.session.messages.extend(new_msgs)
             self.mutate_reactive(ChatScreen.session)  # pyright: ignore[reportArgumentType]
@@ -257,9 +201,8 @@ class ChatScreen(Screen):
             next_msg_idx = len(chunk_msgs)
 
         # Signal to overlay that we're done
-        if process_tx:
-            process_tx.write(b"[done]\n")
-            self.run_worker(process_tx.drain())
+        if wms:
+            self.run_worker(wms.send_turn_over())
 
         # Generate a name for this session
         if not self.session.name:

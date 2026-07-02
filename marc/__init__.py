@@ -14,6 +14,7 @@ from marc.agent.memory import LongTermMemory
 from marc.chat.screen import ChatScreen
 from marc.chat.storage import ChatSession, ChatStorage
 from marc.dream.screen import DreamModeScreen
+from marc.work.screen import WorkModeScreen
 
 
 class Smiley(Static):
@@ -70,6 +71,9 @@ class ChatListProvider(Provider):
 @final
 class MarcApp(App):
     TITLE = "Marc"
+    SCREENS = {
+        "work_mode": WorkModeScreen,
+    }
 
     current_chat: UUID | None = None
 
@@ -107,14 +111,15 @@ class MarcApp(App):
 
     @override
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
-        yield from super().get_system_commands(screen)
+        if isinstance(self.screen_stack[-2], WorkModeScreen):
+            return []
 
+        yield from super().get_system_commands(screen)
         yield SystemCommand(
             "New Chat",
             "Start a fresh conversation with Marc.",
             self.action_new_chat,
         )
-
         yield SystemCommand(
             "Chats",
             "Go to another conversation you've had with Marc",

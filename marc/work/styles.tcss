@@ -1,0 +1,9 @@
+Screen {
+    align: center middle;
+}
+
+Label {
+    width: 50w;
+    height: 1;
+    text-align: center;
+}
