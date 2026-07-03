@@ -20,6 +20,7 @@ class WorkOverlay:
     VIEWPORT_SIZE = (400, 150)
     FRAMES = ""
     FRAME_DURATION = 0.1
+    TEXT_WRAP_MARGIN = 32
 
     def __init__(self):
         self.indicator_frame = 0
@@ -41,16 +42,6 @@ class WorkOverlay:
             always_on_top=True,
         )
 
-        with dpg.font_registry():
-            dpg.add_font(str(self.FONT_PATH), 16, tag="font_md")
-            dpg.add_font(str(self.FONT_PATH), 72, tag="font_face")
-
-            # Global default font
-            dpg.bind_font("font_md")
-
-            # Enable nerd fonts
-            dpg.add_font_range(0xE000, 0xF8FF)
-
         self._build_ui()
 
         dpg.setup_dearpygui()
@@ -68,18 +59,40 @@ class WorkOverlay:
         dpg.destroy_context()
 
     def _build_ui(self):
-        with dpg.window(tag="Work Mode"):
+        with dpg.item_handler_registry(tag="window handler"):
+            dpg.add_item_resize_handler(callback=self._on_window_resize)
+
+        with dpg.font_registry():
+            dpg.add_font(str(self.FONT_PATH), 16, tag="font_md")
+            dpg.add_font(str(self.FONT_PATH), 72, tag="font_face")
+
+            # Global default font
+            dpg.bind_font("font_md")
+
+            # Enable nerd fonts
+            dpg.add_font_range(0xE000, 0xF8FF)
+
+        with dpg.window(tag="Work Mode") as window:
             with dpg.group():
                 dpg.add_text("=D", tag="face")
                 dpg.bind_item_font("face", "font_face")
 
                 with dpg.group(horizontal=True):
-                    dpg.add_text(
-                        "Discombobulating", color=MUTED, tag="reasoning"
-                    )
                     dpg.add_text(self.FRAMES[0], color=MUTED, tag="indicator")
+                    dpg.add_text(
+                        "Ready",
+                        color=MUTED,
+                        tag="reasoning",
+                        wrap=self.VIEWPORT_SIZE[0] - self.TEXT_WRAP_MARGIN,
+                    )
 
                     dpg.hide_item("indicator")
+
+            dpg.bind_item_handler_registry(window, "window handler")
+
+    def _on_window_resize(self, _sender: str | int, _app_data: str | int):
+        width = dpg.get_viewport_width()
+        dpg.configure_item("reasoning", wrap=width - self.TEXT_WRAP_MARGIN)
 
     def _send_msg(self, data: str):
         """
