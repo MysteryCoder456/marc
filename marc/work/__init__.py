@@ -13,23 +13,35 @@ from mss import MSS
 WHITE: tuple[int, int, int] = (255, 255, 255)
 MUTED: tuple[int, int, int] = (120, 120, 120)
 
+FONT_PATH = Path(__file__).parent / "MonaspiceKrNerdFont-Regular.otf"
+VIEWPORT_SIZE = (300, 150)
+TEXT_WRAP_MARGIN = 32
+
+FACE_FRAMES = [
+    ":\\",
+    ":/",
+]
+FACE_FRAME_DURATION = 3.0
+
+INDICATOR_FRAMES = ""
+INDICATOR_FRAME_DURATION = 0.1
+
 
 @final
 class WorkOverlay:
-    FONT_PATH = Path(__file__).parent / "MonaspiceKrNerdFont-Regular.otf"
-    VIEWPORT_SIZE = (400, 150)
-    FRAMES = ""
-    FRAME_DURATION = 0.1
-    TEXT_WRAP_MARGIN = 32
-
     def __init__(self):
+        self.face_frame = 0
+        self.face_frame_elapsed = 0
+        self.face_animating = False
+
         self.indicator_frame = 0
-        self.frame_elapsed = 0
+        self.indicator_frame_elapsed = 0
+        self.indicator_animating = False
 
         with MSS() as sct:
             mon = sct.monitors[1]
             viewport_position = (
-                mon["width"] - self.VIEWPORT_SIZE[0],
+                mon["width"] - VIEWPORT_SIZE[0],
                 0,
             )
         dpg.create_context()
@@ -37,8 +49,8 @@ class WorkOverlay:
             title="Work Mode",
             x_pos=viewport_position[0],
             y_pos=viewport_position[1],
-            width=self.VIEWPORT_SIZE[0],
-            height=self.VIEWPORT_SIZE[1],
+            width=VIEWPORT_SIZE[0],
+            height=VIEWPORT_SIZE[1],
             always_on_top=True,
         )
 
@@ -63,8 +75,8 @@ class WorkOverlay:
             dpg.add_item_resize_handler(callback=self._on_window_resize)
 
         with dpg.font_registry():
-            dpg.add_font(str(self.FONT_PATH), 16, tag="font_md")
-            dpg.add_font(str(self.FONT_PATH), 72, tag="font_face")
+            dpg.add_font(str(FONT_PATH), 16, tag="font_md")
+            dpg.add_font(str(FONT_PATH), 72, tag="font_face")
 
             # Global default font
             dpg.bind_font("font_md")
@@ -78,21 +90,19 @@ class WorkOverlay:
                 dpg.bind_item_font("face", "font_face")
 
                 with dpg.group(horizontal=True):
-                    dpg.add_text(self.FRAMES[0], color=MUTED, tag="indicator")
+                    dpg.add_text("󰄬", color=MUTED, tag="indicator")
                     dpg.add_text(
                         "Ready",
                         color=MUTED,
                         tag="reasoning",
-                        wrap=self.VIEWPORT_SIZE[0] - self.TEXT_WRAP_MARGIN,
+                        wrap=VIEWPORT_SIZE[0] - TEXT_WRAP_MARGIN,
                     )
-
-                    dpg.hide_item("indicator")
 
             dpg.bind_item_handler_registry(window, "window handler")
 
     def _on_window_resize(self, _sender: str | int, _app_data: str | int):
         width = dpg.get_viewport_width()
-        dpg.configure_item("reasoning", wrap=width - self.TEXT_WRAP_MARGIN)
+        dpg.configure_item("reasoning", wrap=width - TEXT_WRAP_MARGIN)
 
     def _send_msg(self, data: str):
         """
@@ -130,19 +140,41 @@ class WorkOverlay:
                 if msg.startswith("[reasoning]"):
                     reasoning = msg[11:].strip()
                     dpg.set_value("reasoning", reasoning)
-                    dpg.show_item("indicator")
+
+                    if not self.face_animating:
+                        dpg.set_value("face", FACE_FRAMES[-1])
+                    self.face_animating = True
+
+                    if not self.indicator_animating:
+                        dpg.set_value("indicator", INDICATOR_FRAMES[-1])
+                    self.indicator_animating = True
 
                 elif msg.startswith("[done]"):
-                    dpg.set_value("reasoning", "Done!")
-                    dpg.hide_item("indicator")
+                    dpg.set_value("reasoning", "Done")
 
-            self.frame_elapsed += dt
-            if self.frame_elapsed > self.FRAME_DURATION:
-                self.frame_elapsed -= self.FRAME_DURATION
-                self.indicator_frame = (self.indicator_frame + 1) % len(
-                    self.FRAMES
-                )
-                dpg.set_value("indicator", self.FRAMES[self.indicator_frame])
+                    dpg.set_value("face", "=D")
+                    self.face_animating = False
+
+                    dpg.set_value("indicator", "󰄬")
+                    self.indicator_animating = False
+
+            if self.face_animating:
+                self.face_frame_elapsed += dt
+                if self.face_frame_elapsed > FACE_FRAME_DURATION:
+                    self.face_frame_elapsed -= FACE_FRAME_DURATION
+                    self.face_frame = (self.face_frame + 1) % len(FACE_FRAMES)
+                    dpg.set_value("face", FACE_FRAMES[self.face_frame])
+
+            if self.indicator_animating:
+                self.indicator_frame_elapsed += dt
+                if self.indicator_frame_elapsed > INDICATOR_FRAME_DURATION:
+                    self.indicator_frame_elapsed -= INDICATOR_FRAME_DURATION
+                    self.indicator_frame = (self.indicator_frame + 1) % len(
+                        INDICATOR_FRAMES
+                    )
+                    dpg.set_value(
+                        "indicator", INDICATOR_FRAMES[self.indicator_frame]
+                    )
 
             dpg.render_dearpygui_frame()
             prev_now = now
