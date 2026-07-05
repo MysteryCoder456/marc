@@ -24,7 +24,9 @@ class UserMemory:
 
     @classmethod
     async def read(cls) -> str:
-        return await cls.USER_MEMORY_PATH.read_text()
+        if await cls.USER_MEMORY_PATH.exists():
+            return await cls.USER_MEMORY_PATH.read_text()
+        return "*(empty — nothing saved yet)*"
 
 
 @final
