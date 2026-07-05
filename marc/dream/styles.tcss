@@ -7,8 +7,3 @@ Screen {
     height: 1;
     text-align: center;
 }
-
-ZZZ {
-    text-style: italic;
-    color: dimgray;
-}

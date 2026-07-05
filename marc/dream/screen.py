@@ -33,7 +33,8 @@ class ZZZ(Widget):
 
     @override
     def render(self) -> RenderResult:
-        return self.FRAMES[self.current_frame]
+        frame = self.FRAMES[self.current_frame]
+        return f"[italic dim]{frame}[/]"
 
 
 @final
