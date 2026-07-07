@@ -5,8 +5,10 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
-from typing import Any
+from typing import Any, Literal, final
+from uuid import UUID, uuid4
 
+from aenum import StrEnum
 from anyio import Path as AsyncPath
 from langchain.agents import create_agent
 from langchain.tools import ToolRuntime, tool
@@ -21,15 +23,31 @@ from langchain_tavily import (
 )
 from langgraph.checkpoint.memory import InMemorySaver
 from mem0 import AsyncMemoryClient
+from pydantic import BaseModel, Field
 
 from .computer import ComputerContext, create_computer_use_agent
 from .memory import ShortTermMemory, UserMemory
 
 
+@final
+class TaskStatus(StrEnum):
+    TODO = "todo"
+    IN_PROGRESS = "in_progress"
+    COMPLETE = "complete"
+
+
+class Task(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    description: str = Field(max_length=50)
+    status: TaskStatus = TaskStatus.TODO  # pyright: ignore[reportAssignmentType]
+
+
 @dataclass
 class RuntimeContext:
+    # TODO: Save in `ChatStorage`
     cwd: AsyncPath
     mem0_client: AsyncMemoryClient
+    current_tasks: list[Task]
 
 
 SYSTEM_PROMPT_TEMPLATE = Template("""# Marc System Prompt
@@ -52,6 +70,22 @@ tools.
   question before acting.
 - Be honest about uncertainty, failures, and partial progress. Do not claim a
   task is complete until the relevant result has been verified.
+
+## Task Tracking
+
+Use the task list to break down and track a multi-step request — skip it for
+anything completable in one or two tool calls.
+
+- At the start of a multi-step request, call `add_tasks` once with the
+  ordered steps.
+- Work through them with `get_next_task`; call `complete_task` as soon as a
+  task is verified done — it returns the following task in the same call, so
+  you don't need a separate `get_next_task` right after.
+- Tasks already returned stay visible in the conversation. Don't call
+  `get_current_tasks` again just to re-check status; use it only to recover
+  context after a gap, or when the user explicitly asks about progress.
+- The list is bookkeeping, not narration: don't report it to the user step by
+  step, only when summarizing overall progress or completion.
 
 ## Context Economy
 
@@ -221,6 +255,90 @@ def get_system_info() -> tuple[str]:
 
     info = platform.uname()
     return tuple(info)  # pyright: ignore[reportReturnType]
+
+
+@tool
+def get_current_tasks(runtime: ToolRuntime[RuntimeContext]) -> list[Task]:
+    """
+    Get the full current task list, including completed tasks.
+
+    Tasks already returned by this or the other task tools stay visible
+    earlier in the conversation — call this only to recover context after a
+    gap, or when the user explicitly asks about progress, not to re-check
+    status you already have.
+
+    Returns:
+        All current tasks, in order, with id, description, and status.
+    """
+
+    return runtime.context.current_tasks
+
+
+@tool
+def add_tasks(
+    tasks: list[str], runtime: ToolRuntime[RuntimeContext]
+) -> list[Task]:
+    """
+    Break a multi-step request into ordered tasks and append them to the
+    current list. Call once, up front, for requests with multiple distinct
+    steps — skip for anything doable in one or two tool calls.
+
+    Args:
+        tasks: Task descriptions, in the order they should be done.
+
+    Returns:
+        The newly created tasks with generated ids and `todo` status.
+    """
+
+    task_objs = [Task(description=task) for task in tasks]
+    runtime.context.current_tasks.extend(task_objs)
+    return task_objs
+
+
+def _get_next_task(task_list: list[Task]) -> Task | None:
+    for task in task_list:
+        if task.status != TaskStatus.COMPLETE:
+            return task
+    return None
+
+
+@tool
+def get_next_task(runtime: ToolRuntime[RuntimeContext]) -> Task | None:
+    """
+    Get the next in-order task that still needs attention.
+
+    `complete_task` already returns this after finishing a task, so you
+    rarely need to call this separately — mainly right after `add_tasks`, or
+    to resume when it's unclear what's next.
+
+    Returns:
+        The next non-complete task, or `None` if all tasks are complete.
+    """
+
+    return _get_next_task(runtime.context.current_tasks)
+
+
+@tool
+def complete_task(
+    task_id: UUID, runtime: ToolRuntime[RuntimeContext]
+) -> Task | None | Literal["Not Found"]:
+    """
+    Mark a task complete once its result is verified, and get what to work on
+    next in the same call.
+
+    Args:
+        task_id: Id of the task to complete, from `add_tasks`,
+            `get_current_tasks`, or `get_next_task`.
+
+    Returns:
+        The next in-order task needing attention, `None` if all tasks are
+        complete, or `"Not Found"` if no task matches `task_id`.
+    """
+
+    for task in runtime.context.current_tasks:
+        if task.id == task_id:
+            task.status = TaskStatus.COMPLETE
+            return _get_next_task(runtime.context.current_tasks)
 
 
 @tool
@@ -409,6 +527,7 @@ async def create_runtime_context() -> RuntimeContext:
     return RuntimeContext(
         cwd=await AsyncPath.cwd(),
         mem0_client=AsyncMemoryClient(),
+        current_tasks=[],
     )
 
 
@@ -434,6 +553,10 @@ async def create_new_agent() -> Runnable:
         context_schema=RuntimeContext,
         tools=[  # TODO: tool to change CWD
             get_system_info,
+            get_current_tasks,
+            add_tasks,
+            get_next_task,
+            complete_task,
             read_file,
             write_file,
             list_dir,
