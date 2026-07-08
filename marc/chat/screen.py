@@ -15,7 +15,7 @@ from textual.screen import Screen
 from textual.widgets import Footer, Input
 from textual.worker import Worker, WorkerState
 
-from marc.agent import RuntimeContext, create_new_agent, create_runtime_context
+from marc.agent import create_new_agent
 from marc.agent.chat_name import generate_chat_name
 from marc.agent.memory import ShortTermMemory
 from marc.work.screen import WorkModeScreen
@@ -38,7 +38,7 @@ class ChatScreen(Screen):
         ("ctrl+o", "enable_work_mode", "Enable Work Mode"),
     ]
 
-    session = reactive(ChatSession, init=False)
+    session: reactive[ChatSession] = reactive(ChatSession, init=False)
     is_agent_running = reactive(False, init=False)
 
     def __init__(self, chat_id: UUID | None = None) -> None:
@@ -49,7 +49,6 @@ class ChatScreen(Screen):
         self.added_messages: set[str] = set()
 
         self.agent: Runnable
-        self.agent_runtime: RuntimeContext
 
     def scroll_to_end(self):
         scroller = self.query_one("#chat-scroll-area")
@@ -60,7 +59,6 @@ class ChatScreen(Screen):
     async def on_mount(self):
         # Initialize agent
         self.agent = await create_new_agent()
-        self.agent_runtime = await create_runtime_context()
 
         if self.chat_id and (ses := await ChatStorage.load_chat(self.chat_id)):
             # Open existing chat
@@ -160,46 +158,60 @@ class ChatScreen(Screen):
             query_messages = self.session.messages + query_messages
             self.is_context_loaded = True
 
-        # Send message to agent
-        next_msg_idx = len(self.session.messages)
-        response = self.agent.astream(
-            {"messages": query_messages},
-            {"configurable": {"thread_id": self.chat_id}},
-            stream_mode="values",
-            context=self.agent_runtime,
-        )
-
+        context_hash = hash(self.session.context)
         wms: WorkModeScreen | None = None
 
-        # Stream agent responses
-        async for chunk in response:
-            chunk_msgs = chunk["messages"]
-            new_msgs: list[AnyMessage] = chunk_msgs[next_msg_idx:]
+        try:
+            # Send message to agent
+            next_msg_idx = len(self.session.messages)
+            response = self.agent.astream(
+                {"messages": query_messages},
+                {"configurable": {"thread_id": self.chat_id}},
+                stream_mode="values",
+                context=self.session.context,
+            )
 
-            wms = self.app.get_screen("work_mode", WorkModeScreen)
+            # Stream agent responses
+            async for chunk in response:
+                # Update UI if context changed
+                new_context_hash = hash(self.session.context)
+                if new_context_hash != context_hash:
+                    self.mutate_reactive(ChatScreen.session)
+                    context_hash = new_context_hash
 
-            # Send reasoning to overlay
-            if wms:
-                reasonings = []
+                chunk_msgs = chunk["messages"]
+                new_msgs: list[AnyMessage] = chunk_msgs[next_msg_idx:]
 
-                for block in new_msgs[-1].content_blocks:
-                    if block["type"] != "reasoning":
-                        continue
+                wms = self.app.get_screen("work_mode", WorkModeScreen)
 
-                    block_reasoning = (
-                        str(block.get("reasoning")).replace("*", "").strip()
-                    )
-                    if block_reasoning:
-                        reasonings.append(block_reasoning)
+                # Send reasoning to overlay
+                if wms:
+                    reasonings = []
 
-                if reasonings:
-                    reasoning = ", ".join(reasonings).capitalize()
-                    self.run_worker(wms.send_reasoning(reasoning))
+                    for block in new_msgs[-1].content_blocks:
+                        if block["type"] != "reasoning":
+                            continue
 
-            self.session.messages.extend(new_msgs)
-            self.mutate_reactive(ChatScreen.session)  # pyright: ignore[reportArgumentType]
+                        block_reasoning = (
+                            str(block.get("reasoning"))
+                            .replace("*", "")
+                            .strip()
+                        )
+                        if block_reasoning:
+                            reasonings.append(block_reasoning)
 
-            next_msg_idx = len(chunk_msgs)
+                    if reasonings:
+                        reasoning = ", ".join(reasonings).capitalize()
+                        self.run_worker(wms.send_reasoning(reasoning))
+
+                self.session.messages.extend(new_msgs)
+                self.mutate_reactive(ChatScreen.session)
+
+                next_msg_idx = len(chunk_msgs)
+
+        except Exception as e:
+            self.log(e)
+            raise e
 
         # Signal to overlay that we're done
         if wms:
