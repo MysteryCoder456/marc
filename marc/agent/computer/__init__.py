@@ -1,7 +1,6 @@
 import io
 from asyncio import sleep
 from base64 import b64encode
-from dataclasses import dataclass
 from typing import Annotated, Literal
 
 from langchain.agents import create_agent
@@ -13,6 +12,7 @@ from langchain_core.messages.content import create_image_block
 from langchain_openai import ChatOpenAI
 from mss import MSS, ScreenShot
 from PIL import Image
+from pydantic.dataclasses import dataclass
 from pynput.keyboard import Controller as KeyboardController
 from pynput.mouse import Button
 from pynput.mouse import Controller as MouseController

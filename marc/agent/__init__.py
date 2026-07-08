@@ -2,13 +2,11 @@ import asyncio
 import os
 import platform
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 from string import Template
-from typing import Any, Literal, final
-from uuid import UUID, uuid4
+from typing import Any, Literal
+from uuid import UUID
 
-from aenum import StrEnum
 from anyio import Path as AsyncPath
 from langchain.agents import create_agent
 from langchain.tools import ToolRuntime, tool
@@ -22,32 +20,12 @@ from langchain_tavily import (
     TavilySearch,
 )
 from langgraph.checkpoint.memory import InMemorySaver
-from mem0 import AsyncMemoryClient
-from pydantic import BaseModel, Field
+from langgraph.runtime import Runtime
 
 from .computer import ComputerContext, create_computer_use_agent
-from .memory import ShortTermMemory, UserMemory
-
-
-@final
-class TaskStatus(StrEnum):
-    TODO = "todo"
-    IN_PROGRESS = "in_progress"
-    COMPLETE = "complete"
-
-
-class Task(BaseModel):
-    id: UUID = Field(default_factory=uuid4)
-    description: str = Field(max_length=50)
-    status: TaskStatus = TaskStatus.TODO  # pyright: ignore[reportAssignmentType]
-
-
-@dataclass
-class RuntimeContext:
-    # TODO: Save in `ChatStorage`
-    cwd: AsyncPath
-    mem0_client: AsyncMemoryClient
-    current_tasks: list[Task]
+from .memory import LongTermMemory, ShortTermMemory, UserMemory
+from .context import RuntimeContext
+from .tasks import Task, TaskStatus
 
 
 SYSTEM_PROMPT_TEMPLATE = Template("""# Marc System Prompt
@@ -84,6 +62,10 @@ anything completable in one or two tool calls.
 - Tasks already returned stay visible in the conversation. Don't call
   `get_current_tasks` again just to re-check status; use it only to recover
   context after a gap, or when the user explicitly asks about progress.
+- Once every task is complete and confirmed, or the request is abandoned or
+  superseded, call `clear_all_tasks` so the stale list doesn't linger into
+  unrelated later work. Don't call it mid-task or just to reset before a new
+  `add_tasks` — that call already appends on its own.
 - The list is bookkeeping, not narration: don't report it to the user step by
   step, only when summarizing overall progress or completion.
 
@@ -342,6 +324,19 @@ def complete_task(
 
 
 @tool
+def clear_all_tasks(runtime: ToolRuntime[RuntimeContext]):
+    """
+    Delete every task in the current list, including completed ones.
+
+    Use once a request's tasks are all complete and confirmed, or the whole
+    request is abandoned or superseded — not mid-task, and not as prep for
+    `add_tasks`, which appends on its own.
+    """
+
+    runtime.context.current_tasks = []
+
+
+@tool
 async def read_file(path: Path, runtime: ToolRuntime[RuntimeContext]) -> str:
     """
     Read the entire contents of the file at the specified path. For
@@ -360,7 +355,7 @@ async def read_file(path: Path, runtime: ToolRuntime[RuntimeContext]) -> str:
     async_path = AsyncPath(path)
 
     if not async_path.is_absolute():
-        async_path = runtime.context.cwd / async_path
+        async_path = AsyncPath(runtime.context.cwd) / async_path
 
     return await async_path.read_text()
 
@@ -385,7 +380,7 @@ async def write_file(
     async_path = AsyncPath(path)
 
     if not async_path.is_absolute():
-        async_path = runtime.context.cwd / async_path
+        async_path = AsyncPath(runtime.context.cwd) / async_path
 
     await async_path.write_text(contents)
 
@@ -410,7 +405,7 @@ async def list_dir(
     async_path = AsyncPath(path)
 
     if not async_path.is_absolute():
-        async_path = runtime.context.cwd / async_path
+        async_path = AsyncPath(runtime.context.cwd) / async_path
 
     return [item.name async for item in async_path.glob("*")]
 
@@ -473,9 +468,7 @@ async def write_user_memory(memory: str):
 
 
 @tool
-async def search_long_term_memory(
-    query: str, runtime: ToolRuntime[RuntimeContext]
-) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
+async def search_long_term_memory(query: str) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
     """
     Semantically search long-term memory for facts about past projects and
     decisions from before today. Today's activity is already in Short-Term
@@ -492,7 +485,7 @@ async def search_long_term_memory(
         timestamps — heavier than a plain string, so search selectively.
     """
 
-    result = await runtime.context.mem0_client.search(
+    result = await LongTermMemory.client.search(
         query, filters={"app_id": "cv.rehatsingh.marc"}
     )
     memories = result["results"]
@@ -523,14 +516,6 @@ async def use_computer(query: str) -> list[ContentBlock]:
     return final_msg.content_blocks
 
 
-async def create_runtime_context() -> RuntimeContext:
-    return RuntimeContext(
-        cwd=await AsyncPath.cwd(),
-        mem0_client=AsyncMemoryClient(),
-        current_tasks=[],
-    )
-
-
 async def create_new_agent() -> Runnable:
     # Create/load memories
     working_memory = InMemorySaver()
@@ -557,6 +542,7 @@ async def create_new_agent() -> Runnable:
             add_tasks,
             get_next_task,
             complete_task,
+            clear_all_tasks,
             read_file,
             write_file,
             list_dir,

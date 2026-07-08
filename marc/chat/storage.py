@@ -15,6 +15,7 @@ from pydantic import (
     field_validator,
 )
 
+from marc.agent.context import RuntimeContext, create_runtime_context
 from marc.dirs import DIRS
 
 
@@ -22,6 +23,7 @@ class ChatSession(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     name: str | None = Field(default=None)
     messages: list[AnyMessage] = Field(default=[])
+    context: RuntimeContext = Field(default_factory=create_runtime_context)
 
     @field_serializer("messages", mode="plain")
     def serialize_messages(self, value: list[AnyMessage]) -> list[dict]:
