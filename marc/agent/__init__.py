@@ -22,10 +22,9 @@ from langchain_tavily import (
 from langgraph.checkpoint.memory import InMemorySaver
 
 from .computer import ComputerContext, create_computer_use_agent
-from .memory import LongTermMemory, ShortTermMemory, UserMemory
 from .context import RuntimeContext
+from .memory import LongTermMemory, ShortTermMemory, UserMemory
 from .tasks import Task, TaskStatus
-
 
 SYSTEM_PROMPT_TEMPLATE = Template("""# Marc System Prompt
 
@@ -55,9 +54,13 @@ anything completable in one or two tool calls.
 
 - At the start of a multi-step request, call `add_tasks` once with the
   ordered steps.
-- Work through them with `get_next_task`; call `complete_task` as soon as a
-  task is verified done — it returns the following task in the same call, so
-  you don't need a separate `get_next_task` right after.
+- Work through them with `get_next_task`. Call `attempt_task` right before
+  starting one — it's the only way "in progress" becomes visible outside the
+  conversation (e.g. in the user's task view); without it a task looks
+  untouched until it's marked done.
+- Call `complete_task` as soon as a task is verified done — it returns the
+  following task in the same call, so you don't need a separate
+  `get_next_task` right after.
 - Tasks already returned stay visible in the conversation. Don't call
   `get_current_tasks` again just to re-check status; use it only to recover
   context after a gap, or when the user explicitly asks about progress.
@@ -297,6 +300,34 @@ def get_next_task(runtime: ToolRuntime[RuntimeContext]) -> Task | None:
     """
 
     return _get_next_task(runtime.context.current_tasks)
+
+
+@tool
+def attempt_task(
+    task_id: UUID, runtime: ToolRuntime[RuntimeContext]
+) -> Task | Literal["Not Found"]:
+    """
+    Mark a task in progress, signaling you've started working on it.
+
+    Call once, right before you begin — this is what makes the task's
+    in-progress status visible outside the conversation (e.g. in the user's
+    task view). `get_next_task`/`complete_task` otherwise only distinguish
+    complete from not-complete, so without this a task looks untouched right
+    up until it's done.
+
+    Args:
+        task_id: Id of the task to start, from `add_tasks`,
+            `get_current_tasks`, or `get_next_task`.
+
+    Returns:
+        The updated task, or `"Not Found"` if no task matches `task_id`.
+    """
+
+    for task in runtime.context.current_tasks:
+        if task.id == task_id:
+            task.status = TaskStatus.IN_PROGRESS
+            return task
+    return "Not Found"
 
 
 @tool
@@ -540,6 +571,7 @@ async def create_new_agent() -> Runnable:
             get_current_tasks,
             add_tasks,
             get_next_task,
+            attempt_task,
             complete_task,
             clear_all_tasks,
             read_file,

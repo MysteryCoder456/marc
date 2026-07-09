@@ -1,4 +1,5 @@
 import asyncio
+from copy import deepcopy
 from typing import final, override
 from uuid import UUID
 
@@ -18,7 +19,7 @@ from textual.worker import Worker, WorkerState
 
 from marc.agent import create_new_agent
 from marc.agent.chat_name import generate_chat_name
-from marc.agent.context import create_runtime_context
+from marc.agent.context import RuntimeContext, create_runtime_context
 from marc.agent.memory import ShortTermMemory
 from marc.work.screen import WorkModeScreen
 
@@ -32,18 +33,22 @@ class ContextPanel(Widget):
     # This reactive is a binding
     context = reactive(create_runtime_context, init=False, recompose=True)
 
-    @override
-    def compose(self) -> ComposeResult:
+    def _compose_tasks(self) -> ComposeResult:
         t = Tree("Tasks")
         t.root.expand_all()
 
         if self.context.current_tasks:
             for task in self.context.current_tasks:
-                t.root.add_leaf(task.description, task)
+                status_icon = task.status.icon
+                t.root.add_leaf(f"{status_icon} {task.description}", task)
         else:
             t.root.add_leaf("No tasks yet")
 
         yield t
+
+    @override
+    def compose(self) -> ComposeResult:
+        yield from self._compose_tasks()
 
 
 @final
@@ -61,11 +66,12 @@ class ChatScreen(Screen):
     ]
 
     session: reactive[ChatSession] = reactive(ChatSession, init=False)
+    session_context: reactive[RuntimeContext] = reactive(
+        create_runtime_context, init=False
+    )
+
     is_agent_running = reactive(False, init=False)
     is_showing_context_panel = reactive(False, init=False)
-
-    # This reactive is computed
-    session_context = reactive(create_runtime_context, init=False)
 
     def __init__(self, chat_id: UUID | None = None) -> None:
         super().__init__()
@@ -117,7 +123,7 @@ class ChatScreen(Screen):
             await self.workers.wait_for_complete()
 
     async def watch_session(self, session: ChatSession):
-        self.session_context = self.session.context
+        self.session_context = deepcopy(self.session.context)
 
         # Find newly added messages
         new_msgs = [
