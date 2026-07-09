@@ -12,6 +12,18 @@ class TaskStatus(StrEnum):
     IN_PROGRESS = "in_progress"
     COMPLETE = "complete"
 
+    @property
+    def icon(self) -> str:
+        match self:
+            case self.TODO:
+                return "󰄰"
+            case self.IN_PROGRESS:
+                return "󱥸"
+            case self.COMPLETE:
+                return "󰄯"
+            case _:
+                return self
+
 
 @dataclass
 class Task:
@@ -29,4 +41,4 @@ class Task:
         if not isinstance(value, Task):
             return False
 
-        return self.id == value.id
+        return hash(self) == hash(value)
