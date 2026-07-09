@@ -22,7 +22,7 @@ class RunningIndicator(Widget):
     current_frame_idx = reactive(0)
 
     def __init__(self) -> None:
-        super().__init__(id="agent-running-indicator")
+        super().__init__()
 
         self.timer: Timer = self.set_interval(
             self.FRAME_DURATION,

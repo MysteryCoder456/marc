@@ -1,16 +1,34 @@
+RunningIndicator {
+    display: none;
+    margin-left: 1;
+    margin-bottom: 1;
+    height: auto;
+}
+
+ContextPanel {
+    display: none;
+    width: 30vw;
+    min-width: 55;
+    padding: 1;
+    background: $panel;
+    border-left: $panel-lighten-1 wide;
+
+    Tree {
+        background: transparent;
+
+        &:focus {
+            background-tint: transparent 0%;
+        }
+    }
+}
+
 #bottom-dock {
     dock: bottom;
 }
 
 #chat-input {
+    margin-top: 1;
     margin-bottom: 1;
-}
-
-#agent-running-indicator {
-    display: none;
-    margin-left: 1;
-    margin-bottom: 1;
-    height: auto;
 }
 
 .message {

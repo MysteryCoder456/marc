@@ -8,21 +8,42 @@ from langchain_core.messages import (
 from langchain_core.runnables import Runnable
 from textual import on, work
 from textual.app import ComposeResult
-from textual.containers import VerticalGroup, VerticalScroll
+from textual.containers import Horizontal, VerticalGroup, VerticalScroll
 from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import Screen
-from textual.widgets import Footer, Input
+from textual.widget import Widget
+from textual.widgets import Footer, Input, Tree
 from textual.worker import Worker, WorkerState
 
 from marc.agent import create_new_agent
 from marc.agent.chat_name import generate_chat_name
+from marc.agent.context import create_runtime_context
 from marc.agent.memory import ShortTermMemory
 from marc.work.screen import WorkModeScreen
 
 from .indicator import RunningIndicator
 from .message import ChatMessage
 from .storage import ChatSession, ChatStorage
+
+
+@final
+class ContextPanel(Widget):
+    # This reactive is a binding
+    context = reactive(create_runtime_context, init=False, recompose=True)
+
+    @override
+    def compose(self) -> ComposeResult:
+        t = Tree("Tasks")
+        t.root.expand_all()
+
+        if self.context.current_tasks:
+            for task in self.context.current_tasks:
+                t.root.add_leaf(task.description, task)
+        else:
+            t.root.add_leaf("No tasks yet")
+
+        yield t
 
 
 @final
@@ -36,10 +57,15 @@ class ChatScreen(Screen):
     CSS_PATH = "styles.tcss"
     BINDINGS = [
         ("ctrl+o", "enable_work_mode", "Enable Work Mode"),
+        ("ctrl+l", "toggle_context_panel", "Toggle Context Panel"),
     ]
 
     session: reactive[ChatSession] = reactive(ChatSession, init=False)
     is_agent_running = reactive(False, init=False)
+    is_showing_context_panel = reactive(False, init=False)
+
+    # This reactive is computed
+    session_context = reactive(create_runtime_context, init=False)
 
     def __init__(self, chat_id: UUID | None = None) -> None:
         super().__init__()
@@ -91,6 +117,8 @@ class ChatScreen(Screen):
             await self.workers.wait_for_complete()
 
     async def watch_session(self, session: ChatSession):
+        self.session_context = self.session.context
+
         # Find newly added messages
         new_msgs = [
             msg
@@ -116,8 +144,15 @@ class ChatScreen(Screen):
         else:
             indicator.hide()
 
+    def watch_is_showing_context_panel(self, showing: bool):
+        panel = self.query_one(ContextPanel)
+        panel.styles.display = "block" if showing else "none"
+
     def action_enable_work_mode(self):
         self.app.push_screen("work_mode")
+
+    def action_toggle_context_panel(self):
+        self.is_showing_context_panel = not self.is_showing_context_panel
 
     @on(Input.Submitted, "#chat-input")
     def on_chat_input_submitted(self, event: Input.Submitted):
@@ -229,9 +264,12 @@ class ChatScreen(Screen):
 
     @override
     def compose(self) -> ComposeResult:
-        with VerticalScroll(id="chat-scroll-area"):
-            yield VerticalGroup(id="messages")
-            yield RunningIndicator()
+        with Horizontal():
+            with VerticalScroll(id="chat-scroll-area"):
+                yield VerticalGroup(id="messages")
+                yield RunningIndicator()
+
+            yield ContextPanel().data_bind(context=ChatScreen.session_context)
 
         with VerticalGroup(id="bottom-dock"):
             yield Input(placeholder="Chat", id="chat-input")
