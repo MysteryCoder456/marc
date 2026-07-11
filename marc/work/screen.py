@@ -62,10 +62,12 @@ class WorkModeScreen(Screen):
             self.overlay_process.kill()
             await self.overlay_process.wait()
 
-    async def on_mount(self):
-        # FIXME: on_mount isn't called when opening overlay for the second time.
+    # Not using `on_mount` because it only runs once in a single app lifecycle
+    async def on_screen_resume(self):
         await self.start_overlay()
 
+    # Would use `on_screen_suspend` for parity, but this is only meant to run
+    # when the entire app shuts down.
     async def on_unmount(self):
         await self.close_overlay()
 
