@@ -8,6 +8,8 @@ from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Footer, Label
 
+from .messages import OverlayMessage, OverlayMessageType
+
 
 @final
 class WorkModeScreen(Screen):
@@ -25,17 +27,20 @@ class WorkModeScreen(Screen):
         if proc := self.overlay_process:
             return proc.stdin
 
-    async def send_reasoning(self, reasoning: str):
+    async def send_message(self, msg: OverlayMessageType):
         if stdin := self._get_process_stdin():
-            stdin.write(f"[reasoning] {reasoning}\n".encode())
-            await stdin.drain()
-
-    async def send_turn_over(self):
-        if stdin := self._get_process_stdin():
-            stdin.write(b"[done]\n")
+            msg_outer = OverlayMessage(msg=msg)
+            serialized = msg_outer.model_dump_json()
+            stdin.write(f"{serialized}\n".encode())
             await stdin.drain()
 
     async def start_overlay(self):
+        if self.overlay_process:
+            self.log(
+                "Warning: attempted to start overlay process when one already exists. Continuing with existing process."
+            )
+            return
+
         self.overlay_process = await asyncio.create_subprocess_exec(
             "python",
             "-m",
@@ -58,6 +63,7 @@ class WorkModeScreen(Screen):
             await self.overlay_process.wait()
 
     async def on_mount(self):
+        # FIXME: on_mount isn't called when opening overlay for the second time.
         await self.start_overlay()
 
     async def on_unmount(self):
