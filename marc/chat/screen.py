@@ -21,6 +21,7 @@ from marc.agent import create_new_agent
 from marc.agent.chat_name import generate_chat_name
 from marc.agent.context import RuntimeContext, create_runtime_context
 from marc.agent.memory import ShortTermMemory
+from marc.work.messages import ReasoningMessage, TurnFinishedMessage
 from marc.work.screen import WorkModeScreen
 
 from .indicator import RunningIndicator
@@ -200,7 +201,7 @@ class ChatScreen(Screen):
             self.is_context_loaded = True
 
         context_hash = hash(self.session.context)
-        wms: WorkModeScreen | None = None
+        wms = self.app.get_screen("work_mode", WorkModeScreen)
 
         try:
             # Send message to agent
@@ -223,27 +224,22 @@ class ChatScreen(Screen):
                 chunk_msgs = chunk["messages"]
                 new_msgs: list[AnyMessage] = chunk_msgs[next_msg_idx:]
 
-                wms = self.app.get_screen("work_mode", WorkModeScreen)
-
                 # Send reasoning to overlay
-                if wms:
-                    reasonings = []
+                reasonings = []
+                for block in new_msgs[-1].content_blocks:
+                    if block["type"] != "reasoning":
+                        continue
 
-                    for block in new_msgs[-1].content_blocks:
-                        if block["type"] != "reasoning":
-                            continue
-
-                        block_reasoning = (
-                            str(block.get("reasoning"))
-                            .replace("*", "")
-                            .strip()
-                        )
-                        if block_reasoning:
-                            reasonings.append(block_reasoning)
-
-                    if reasonings:
-                        reasoning = ", ".join(reasonings).capitalize()
-                        self.run_worker(wms.send_reasoning(reasoning))
+                    block_reasoning = (
+                        str(block.get("reasoning")).replace("*", "").strip()
+                    )
+                    if block_reasoning:
+                        reasonings.append(block_reasoning)
+                if reasonings:
+                    reasoning = ", ".join(reasonings).capitalize()
+                    self.run_worker(
+                        wms.send_message(ReasoningMessage(content=reasoning))
+                    )
 
                 self.session.messages.extend(new_msgs)
                 self.mutate_reactive(ChatScreen.session)
@@ -255,8 +251,7 @@ class ChatScreen(Screen):
             raise e
 
         # Signal to overlay that we're done
-        if wms:
-            self.run_worker(wms.send_turn_over())
+        self.run_worker(wms.send_message(TurnFinishedMessage()))
 
         # Generate a name for this session
         if not self.session.name:

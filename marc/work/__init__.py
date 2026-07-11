@@ -10,6 +10,14 @@ from typing import final
 import dearpygui.dearpygui as dpg
 from mss import MSS
 
+from .messages import (
+    OverlayMessage,
+    OverlayMessageType,
+    ReasoningMessage,
+    TasksUpdatedMessage,
+    TurnFinishedMessage,
+)
+
 WHITE: tuple[int, int, int] = (255, 255, 255)
 MUTED: tuple[int, int, int] = (120, 120, 120)
 
@@ -65,7 +73,7 @@ class WorkOverlay:
             target=self._recv_loop, daemon=True
         )
         self.recv_thread.start()
-        self.messages: Queue[str] = Queue()
+        self.messages: Queue[OverlayMessageType] = Queue()
 
     def __del__(self):
         dpg.destroy_context()
@@ -121,7 +129,9 @@ class WorkOverlay:
         """
 
         for line in stdin:
-            self.messages.put(str(line))
+            serialized = str(line)
+            msg = OverlayMessage.model_validate_json(serialized)
+            self.messages.put(msg.msg)
 
     def render_loop(self):
         prev_now = time.time()
@@ -137,9 +147,8 @@ class WorkOverlay:
                 except Empty:
                     break
 
-                if msg.startswith("[reasoning]"):
-                    reasoning = msg[11:].strip()
-                    dpg.set_value("reasoning", reasoning)
+                if isinstance(msg, ReasoningMessage):
+                    dpg.set_value("reasoning", msg.content)
 
                     if not self.face_animating:
                         dpg.set_value("face", FACE_FRAMES[-1])
@@ -149,7 +158,7 @@ class WorkOverlay:
                         dpg.set_value("indicator", INDICATOR_FRAMES[-1])
                     self.indicator_animating = True
 
-                elif msg.startswith("[done]"):
+                elif isinstance(msg, TurnFinishedMessage):
                     dpg.set_value("reasoning", "Done")
 
                     dpg.set_value("face", "=D")
@@ -157,6 +166,10 @@ class WorkOverlay:
 
                     dpg.set_value("indicator", "󰄬")
                     self.indicator_animating = False
+
+                elif isinstance(msg, TasksUpdatedMessage):
+                    # TODO: show tasks
+                    ...
 
             if self.face_animating:
                 self.face_frame_elapsed += dt
