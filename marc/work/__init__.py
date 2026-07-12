@@ -1,11 +1,11 @@
-# pyright: reportGeneralTypeIssues=false
+# pyright: reportGeneralTypeIssues=false, reportUnnecessaryIsInstance=false
 
 import threading
 import time
 from pathlib import Path
 from queue import Empty, Queue
 from sys import stdin
-from typing import final
+from typing import Any, final
 
 import dearpygui.dearpygui as dpg
 from mss import MSS
@@ -22,7 +22,7 @@ WHITE: tuple[int, int, int] = (255, 255, 255)
 MUTED: tuple[int, int, int] = (120, 120, 120)
 
 FONT_PATH = Path(__file__).parent / "MonaspiceKrNerdFont-Regular.otf"
-VIEWPORT_SIZE = (300, 150)
+VIEWPORT_SIZE = (400, 200)
 TEXT_WRAP_MARGIN = 32
 
 FACE_FRAMES = [
@@ -45,6 +45,8 @@ class WorkOverlay:
         self.indicator_frame = 0
         self.indicator_frame_elapsed = 0
         self.indicator_animating = False
+
+        self.task_ids: list[str] = []
 
         with MSS() as sct:
             mon = sct.monitors[1]
@@ -93,26 +95,46 @@ class WorkOverlay:
             dpg.add_font_range(0xE000, 0xF8FF)
 
         with dpg.window(tag="Work Mode") as window:
-            with dpg.group():
-                dpg.add_text("=D", tag="face")
-                dpg.bind_item_font("face", "font_face")
+            with dpg.table(
+                header_row=True,
+                resizable=True,
+                policy=dpg.mvTable_SizingStretchProp,
+                tag="tasks_table",
+            ):
+                dpg.add_table_column(width_fixed=True)
+                dpg.add_table_column(label="Tasks", width_stretch=True)
 
-                with dpg.group(horizontal=True):
-                    dpg.add_text("󰄬", color=MUTED, tag="indicator")
-                    dpg.add_text(
-                        "Ready",
-                        color=MUTED,
-                        tag="reasoning",
-                        wrap=VIEWPORT_SIZE[0] - TEXT_WRAP_MARGIN,
-                    )
+                with dpg.table_row():
+                    with dpg.group(tag="face_group"):
+                        dpg.add_text("=D", tag="face")
+                        dpg.bind_item_font("face", "font_face")
+
+                    dpg.add_group(tag="tasks")
+
+            with dpg.group(horizontal=True):
+                dpg.add_text("󰄬", color=MUTED, tag="indicator")
+                dpg.add_text(
+                    "Ready",
+                    color=MUTED,
+                    tag="reasoning",
+                    wrap=VIEWPORT_SIZE[0] - TEXT_WRAP_MARGIN,
+                )
 
             dpg.bind_item_handler_registry(window, "window handler")
 
     def _on_window_resize(self, _sender: str | int, _app_data: str | int):
-        width = dpg.get_viewport_width()
-        dpg.configure_item("reasoning", wrap=width - TEXT_WRAP_MARGIN)
+        viewport_width = dpg.get_viewport_width()
 
-    def _send_msg(self, data: str):
+        # Adjust reasoning text wrap
+        dpg.configure_item("reasoning", wrap=viewport_width - TEXT_WRAP_MARGIN)
+
+        # Adjust task text wrap
+        face_width = dpg.get_item_rect_size("face_group")[0]
+        task_wrap = viewport_width - face_width - TEXT_WRAP_MARGIN - 8
+        for task_id in self.task_ids:
+            dpg.configure_item(f"task-description-{task_id}", wrap=task_wrap)
+
+    def _send_msg(self, data: Any):  # pyright: ignore[reportExplicitAny]
         """
         Send data to parent process via piped STDOUT.
 
@@ -168,8 +190,31 @@ class WorkOverlay:
                     self.indicator_animating = False
 
                 elif isinstance(msg, TasksUpdatedMessage):
-                    # TODO: show tasks
-                    ...
+                    # Save new task ids
+                    self.task_ids = [str(t.id) for t in msg.new_tasks]
+
+                    # Remove existing tasks
+                    dpg.delete_item("tasks", children_only=True)
+
+                    # Add updated tasks
+                    viewport_width = dpg.get_viewport_width()
+                    face_width = dpg.get_item_rect_size("face_group")[0]
+                    task_wrap = (
+                        viewport_width - face_width - TEXT_WRAP_MARGIN - 8
+                    )
+                    for task in msg.new_tasks:
+                        with dpg.group(horizontal=True, parent="tasks"):
+                            dpg.add_text(
+                                task.status.icon,
+                                color=MUTED,
+                                tag=f"task-indicator-{task.id}",
+                            )
+                            dpg.add_text(
+                                task.description,
+                                color=MUTED,
+                                tag=f"task-description-{task.id}",
+                                wrap=task_wrap,
+                            )
 
             if self.face_animating:
                 self.face_frame_elapsed += dt

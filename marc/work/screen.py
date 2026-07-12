@@ -7,6 +7,7 @@ from textual import work
 from textual.app import ComposeResult
 from textual.screen import Screen
 from textual.widgets import Footer, Label
+from textual.worker import Worker
 
 from .messages import OverlayMessage, OverlayMessageType
 
@@ -22,6 +23,7 @@ class WorkModeScreen(Screen):
         super().__init__("work mode")
 
         self.overlay_process: Process | None = None
+        self.recv_worker: Worker | None = None
 
     def _get_process_stdin(self) -> StreamWriter | None:
         if proc := self.overlay_process:
@@ -49,6 +51,7 @@ class WorkModeScreen(Screen):
             stderr=asyncio.subprocess.PIPE,
             stdin=asyncio.subprocess.PIPE,
         )
+        self.recv_worker = self.recv_messages()
         self.await_overlay_close()
 
     async def close_overlay(self):
@@ -85,10 +88,33 @@ class WorkModeScreen(Screen):
             return
 
         await self.overlay_process.wait()
+
+        if self.recv_worker:
+            self.recv_worker.cancel()
+
+        if stderr := self.overlay_process.stderr:
+
+            async def log_stderr():
+                self.log((await stderr.read()).decode())
+
+            self.run_worker(log_stderr())
+
         self.overlay_process = None
 
         if self.is_running:
             self.app.pop_screen()
+
+    @work
+    async def recv_messages(self):
+        if not self.overlay_process:
+            return
+
+        stdout = self.overlay_process.stdout
+        if not stdout:
+            return
+
+        while line := await stdout.readline():
+            self.log(line.decode())
 
     @override
     def compose(self) -> ComposeResult:

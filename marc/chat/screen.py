@@ -21,7 +21,11 @@ from marc.agent import create_new_agent
 from marc.agent.chat_name import generate_chat_name
 from marc.agent.context import RuntimeContext, create_runtime_context
 from marc.agent.memory import ShortTermMemory
-from marc.work.messages import ReasoningMessage, TurnFinishedMessage
+from marc.work.messages import (
+    ReasoningMessage,
+    TasksUpdatedMessage,
+    TurnFinishedMessage,
+)
 from marc.work.screen import WorkModeScreen
 
 from .indicator import RunningIndicator
@@ -33,6 +37,12 @@ from .storage import ChatSession, ChatStorage
 class ContextPanel(Widget):
     # This reactive is a binding
     context = reactive(create_runtime_context, init=False, recompose=True)
+
+    async def watch_context(self, context: RuntimeContext):
+        wms = self.app.get_screen("work_mode", WorkModeScreen)
+        await wms.send_message(
+            TasksUpdatedMessage(new_tasks=context.current_tasks)
+        )
 
     def _compose_tasks(self) -> ComposeResult:
         t = Tree("Tasks")
@@ -155,8 +165,15 @@ class ChatScreen(Screen):
         panel = self.query_one(ContextPanel)
         panel.styles.display = "block" if showing else "none"
 
-    def action_enable_work_mode(self):
-        self.app.push_screen("work_mode")
+    async def action_enable_work_mode(self):
+        await self.app.push_screen("work_mode")
+
+        # Show current tasks on overlay
+        await asyncio.sleep(3)  # HACK: wait until overlay is actually visible
+        wms = self.app.get_screen("work_mode", WorkModeScreen)
+        await wms.send_message(
+            TasksUpdatedMessage(new_tasks=self.session_context.current_tasks)
+        )
 
     def action_toggle_context_panel(self):
         self.is_showing_context_panel = not self.is_showing_context_panel
