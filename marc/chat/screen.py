@@ -5,6 +5,7 @@ from uuid import UUID
 
 from langchain_core.messages import (
     AnyMessage,
+    ToolMessage,
 )
 from langchain_core.runnables import Runnable
 from textual import on, work
@@ -29,7 +30,7 @@ from marc.work.messages import (
 from marc.work.screen import WorkModeScreen
 
 from .indicator import RunningIndicator
-from .message import ChatMessage
+from .message import ChatMessageBlock, ToolCallBlock
 from .storage import ChatSession, ChatStorage
 
 
@@ -146,10 +147,30 @@ class ChatScreen(Screen):
             return
         self.added_messages.update([msg.id for msg in new_msgs])  # pyright: ignore[reportArgumentType]
 
-        # Mount new message widgets
-        msg_widgets = [ChatMessage(msg) for msg in new_msgs]
         msg_container = self.query_one("#messages")
+        tool_results: list[ToolMessage] = []
+
+        # Mount new message widgets
+        msg_widgets: list[Widget] = []
+        for msg in new_msgs:
+            if msg.type == "tool":
+                tool_results.append(msg)
+                continue
+
+            new_widgets: list[Widget] = [ChatMessageBlock(msg)]
+            if msg.type == "ai":
+                new_widgets.extend(
+                    [ToolCallBlock(tc) for tc in msg.tool_calls]
+                )
+            msg_widgets.extend(new_widgets)
         await msg_container.mount_all(msg_widgets)
+
+        # Add tool call results under corresponding tool call block
+        for msg in tool_results:
+            tool_call = msg_container.query_one(
+                f"#tool-call-{msg.tool_call_id}", ToolCallBlock
+            )
+            tool_call.tool_result = msg
 
         self.scroll_to_end()
 
