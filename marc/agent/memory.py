@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, ClassVar, final
 from anyio import Path
 from langchain.agents import create_agent
 from langchain_anthropic import ChatAnthropic
+from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 from langchain_core.messages import AnyMessage
 from mem0 import AsyncMemoryClient
 from pydantic import BaseModel
@@ -44,8 +45,7 @@ class ShortTermMemory:
         cls, messages: list[AnyMessage]
     ) -> list[str]:
         model = ChatAnthropic(
-            model="claude-sonnet-5",  # pyright: ignore[reportCallIssue]
-            effort="medium",
+            model="claude-haiku-4-5",  # pyright: ignore[reportCallIssue]
         )
         system_prompt = (
             "Summarize this conversation as bullet points for a daily activity log.\n\n"
@@ -65,6 +65,7 @@ class ShortTermMemory:
         agent = create_agent(
             model=model,
             system_prompt=system_prompt,
+            middleware=[AnthropicPromptCachingMiddleware()],
             response_format=cls.ChatSummaryOutput,
         )
 
@@ -83,8 +84,7 @@ class ShortTermMemory:
         current_summaries = await cls.read()
 
         model = ChatAnthropic(
-            model="claude-sonnet-5",  # pyright: ignore[reportCallIssue]
-            effort="medium",
+            model="claude-haiku-4-5",  # pyright: ignore[reportCallIssue]
         )
         system_prompt = (
             "You maintain a daily activity log. Each session entry uses this format:\n\n"
@@ -106,6 +106,7 @@ class ShortTermMemory:
         agent = create_agent(
             model=model,
             system_prompt=system_prompt,
+            middleware=[AnthropicPromptCachingMiddleware()],
             response_format=cls.ReconciliationOutput,
         )
 
