@@ -50,6 +50,22 @@ ContextPanel {
     border: double $secondary;
 }
 
-.message-tool {
-    border: double $accent;
+.reasoning-block {
+    color: dimgray;
+}
+
+.tool-call {
+    height: auto;
+    margin-bottom: 1;
+
+    Tree {
+        height: auto;
+        background: transparent;
+        scrollbar-visibility: hidden;
+        scrollbar-size: 0 0;
+
+        &:focus {
+            background-tint: transparent 0%;
+        }
+    }
 }
