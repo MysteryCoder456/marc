@@ -167,12 +167,15 @@ class ChatScreen(Screen):
                 tool_results.append(msg)
                 continue
 
-            new_widgets: list[Widget] = [ChatMessageBlock(msg)]
             if msg.type == "ai":
-                new_widgets.extend(
+                # Only include chat message if non-tool calls exist
+                if len(msg.content_blocks) > len(msg.tool_calls):
+                    msg_widgets.append(ChatMessageBlock(msg))
+                msg_widgets.extend(
                     [ToolCallBlock(tc) for tc in msg.tool_calls]
                 )
-            msg_widgets.extend(new_widgets)
+            else:
+                msg_widgets.append(ChatMessageBlock(msg))
         await msg_container.mount_all(msg_widgets)
 
         # Add tool call results under corresponding tool call block
