@@ -274,6 +274,8 @@ class ChatScreen(Screen):
 
                 chunk_msgs = chunk["messages"]
                 new_msgs: list[AnyMessage] = chunk_msgs[next_msg_idx:]
+                if not new_msgs:
+                    continue
 
                 # Send reasoning to overlay
                 reasonings = []
