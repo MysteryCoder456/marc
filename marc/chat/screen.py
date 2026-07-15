@@ -89,8 +89,10 @@ class ChatScreen(Screen):
         super().__init__()
 
         self.chat_id = chat_id
-        self.is_context_loaded = True
         self.added_messages: set[str] = set()
+
+        self.is_context_loaded = True
+        self.is_context_panel_introduced = False
 
         self.agent: Runnable
 
@@ -136,6 +138,14 @@ class ChatScreen(Screen):
 
     async def watch_session(self, session: ChatSession):
         self.session_context = deepcopy(self.session.context)
+
+        # Open context panel when tasks are added for the first time in this chat
+        if (
+            self.session_context.current_tasks
+            and not self.is_context_panel_introduced
+        ):
+            self.is_showing_context_panel = True
+            self.is_context_panel_introduced = True
 
         # Find newly added messages
         new_msgs = [
