@@ -71,11 +71,11 @@ class WorkOverlay:
         dpg.set_primary_window("Work Mode", True)
 
         # Setup receiver thread
+        self.messages: Queue[OverlayMessageType] = Queue()
         self.recv_thread = threading.Thread(
             target=self._recv_loop, daemon=True
         )
         self.recv_thread.start()
-        self.messages: Queue[OverlayMessageType] = Queue()
 
     def __del__(self):
         dpg.destroy_context()
