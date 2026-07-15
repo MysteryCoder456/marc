@@ -20,7 +20,7 @@ class TasksUpdatedMessage(BaseModel):
 
 
 # Union of all possible message types.
-# NOTE: Must be updated everytime a new message type is added.
+# NOTE: Must be updated every time a new message type is added.
 OverlayMessageType = (
     ReasoningMessage | TurnFinishedMessage | TasksUpdatedMessage
 )
