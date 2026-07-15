@@ -37,6 +37,8 @@ class WorkModeScreen(Screen):
             await stdin.drain()
 
     async def start_overlay(self):
+        import sys
+
         if self.overlay_process:
             self.log(
                 "Warning: attempted to start overlay process when one already exists. Continuing with existing process."
@@ -44,11 +46,11 @@ class WorkModeScreen(Screen):
             return
 
         self.overlay_process = await asyncio.create_subprocess_exec(
-            "python",
+            sys.executable,
             "-m",
             "marc.work",
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
             stdin=asyncio.subprocess.PIPE,
         )
         self.recv_worker = self.recv_messages()
