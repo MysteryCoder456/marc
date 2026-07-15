@@ -78,10 +78,14 @@ class ChatMessageBlock(Static):
             for block in self.content_blocks:
                 match block["type"]:
                     case "text":
-                        yield Markdown(block["text"])
+                        text = block["text"] or "No content"
+                        yield Markdown(text)
 
                     case "reasoning":
-                        reasoning = block.get("reasoning", "No reasoning")
+                        reasoning = (
+                            block.get("reasoning", "No reasoning")
+                            or "No reasoning"
+                        )
                         yield Markdown(reasoning, classes="reasoning-block")
 
                     case "tool_call":
