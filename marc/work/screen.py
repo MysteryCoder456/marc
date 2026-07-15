@@ -33,8 +33,14 @@ class WorkModeScreen(Screen):
         if stdin := self._get_process_stdin():
             msg_outer = OverlayMessage(msg=msg)
             serialized = msg_outer.model_dump_json()
-            stdin.write(f"{serialized}\n".encode())
-            await stdin.drain()
+            try:
+                stdin.write(f"{serialized}\n".encode())
+                await stdin.drain()
+            except (BrokenPipeError, ConnectionResetError):
+                self.log(
+                    "Warning: Failed to send message to overlay because the "
+                    "process is no longer accepting input."
+                )
 
     async def start_overlay(self):
         import sys

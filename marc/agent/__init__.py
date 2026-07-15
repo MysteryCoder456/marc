@@ -372,6 +372,7 @@ def complete_task(
         if task.id == task_id:
             task.status = TaskStatus.COMPLETE
             return _get_next_task(runtime.context.current_tasks)
+    return "Not Found"
 
 
 @tool

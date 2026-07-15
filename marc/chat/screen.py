@@ -301,7 +301,7 @@ class ChatScreen(Screen):
 
         except Exception as e:
             self.log(e)
-            raise e
+            raise
 
         # Signal to overlay that we're done
         self.run_worker(wms.send_message(TurnFinishedMessage()))

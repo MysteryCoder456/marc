@@ -9,6 +9,7 @@ from typing import Any, final
 
 import dearpygui.dearpygui as dpg
 from mss import MSS
+from pydantic import ValidationError
 
 from .messages import (
     OverlayMessage,
@@ -152,7 +153,10 @@ class WorkOverlay:
 
         for line in stdin:
             serialized = str(line)
-            msg = OverlayMessage.model_validate_json(serialized)
+            try:
+                msg = OverlayMessage.model_validate_json(serialized)
+            except ValidationError:
+                continue
             self.messages.put(msg.msg)
 
     def render_loop(self):
