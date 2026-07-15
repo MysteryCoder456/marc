@@ -111,8 +111,11 @@ class MarcApp(App):
 
     @override
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
-        if isinstance(self.screen_stack[-2], WorkModeScreen):
-            return []
+        if (
+            len(self.screen_stack) > 1
+            and isinstance(self.screen_stack[-2], WorkModeScreen)
+        ):
+            return
 
         yield from super().get_system_commands(screen)
         yield SystemCommand(
