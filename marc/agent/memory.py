@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, ClassVar, final
 from anyio import Path
 from langchain.agents import create_agent
 from langchain_anthropic import ChatAnthropic
-from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 from langchain_core.messages import AnyMessage
 from mem0 import AsyncMemoryClient
 from pydantic import BaseModel
@@ -65,7 +64,6 @@ class ShortTermMemory:
         agent = create_agent(
             model=model,
             system_prompt=system_prompt,
-            middleware=[AnthropicPromptCachingMiddleware()],
             response_format=cls.ChatSummaryOutput,
         )
 
@@ -106,7 +104,6 @@ class ShortTermMemory:
         agent = create_agent(
             model=model,
             system_prompt=system_prompt,
-            middleware=[AnthropicPromptCachingMiddleware()],
             response_format=cls.ReconciliationOutput,
         )
 
