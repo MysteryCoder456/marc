@@ -41,4 +41,8 @@ class Task:
         if not isinstance(value, Task):
             return False
 
-        return hash(self) == hash(value)
+        return (
+            self.id == value.id
+            and self.description == value.description
+            and self.status == value.status
+        )
