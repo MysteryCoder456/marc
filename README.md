@@ -15,14 +15,11 @@ None of this comes from a personality gimmick or a tone setting. It's how the ag
 
 ## What it can do
 
-### 💬 Chat TUI
-The main way you talk to Marc is a terminal chat app built with [Textual](https://textual.textualize.io/). It's a real interface, not a dev harness: multiple chats with persistent history, quick switching through a command palette, and chats that name themselves.
-
 ### 🧠 Memory
 Marc remembers things across sessions, in three layers:
 
-- **User profile** (`USER.md`) — a short list of stable facts about you, present in every session.
-- **Short-term memory** (`TODAY.md`) — a daily log of what got decided, what got done, and what's still open. Not raw chat transcripts.
+- **User profile** (`USER.md`) — a paragraph of stable facts about you, present in every session.
+- **Short-term memory** (`TODAY.md`) — a summarized, running log of every interaction with Marc, injected into every new session.
 - **Long-term memory** ([Mem0](https://mem0.ai)) — durable memory that Marc searches when older context becomes relevant.
 
 ### 🌙 Dreaming
@@ -32,13 +29,13 @@ Once a day, before the first chat opens, Marc consolidates yesterday's short-ter
 For GUI tasks, Marc hands off to an internal subagent that can look at your screen and act on it. You give it a goal in plain language and get a plain-language report back. You never talk to subagents directly — the whole point is that you have one relationship, with Marc.
 
 ### 🔎 Web research
-Marc uses the full [Tavily](https://tavily.com) toolset (Search, Extract, Map, Crawl), starting with the cheapest tool that can answer and escalating only when needed. All internet access goes through these tools — shell commands are not allowed to touch the network.
+Marc uses the full [Tavily](https://tavily.com) toolset (Search, Extract, Map, Crawl), starting with the cheapest tool that can answer and escalating only when needed. All web access goes through these tools. 
 
 ### ⚡ Shell access
-Marc can run shell commands for local work. Fair warning: this is the roughest part of the project right now. Commands run without asking you first, and there's no sandbox. Be thoughtful about what you let it do.
+Marc can run shell commands for local work. Fair warning: this is the roughest part of the project right now. Commands run without asking you first, and there's no sandbox. I'd recommend going in and disabling shell tools in `marc/agent/__init__.py` if you're going to try Marc until permission interrupts are implemented.
 
 ### 🪟 Work-mode overlay
-A small on-screen overlay that sits alongside your work while Marc is active: an animated face, Marc's reasoning streaming live, and a panel showing the tasks it's tracking. It checks in with you periodically as you work.
+A small on-screen overlay that sits alongside your work while Marc is active: Marc's face as he works, his reasoning streaming live, and a panel showing the current session's tasks. It checks in with you periodically as it works.
 
 ## Not done yet
 
@@ -51,7 +48,7 @@ A small on-screen overlay that sits alongside your work while Marc is active: an
 ## Stack
 
 - LangChain + LangGraph for orchestration
-- OpenAI models only for now — GPT-5.6-terra for the main agent, GPT-5.6-luna for everything else. One provider keeps things simple to set up and test while the project is young; model selection is on the roadmap.
+- OpenAI models only for now — GPT-5.6-terra for the main agent, GPT-5.6-luna for everything else. One provider keeps things simple to set up and test while the project is young; model and provider selection is on the roadmap.
 - Mem0 for long-term memory
 - Textual for the TUI
 - Tavily for web access
