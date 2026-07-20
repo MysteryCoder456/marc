@@ -53,7 +53,7 @@ A small on-screen overlay that sits alongside your work while Marc is active: Ma
 
 Marc uses [uv](https://docs.astral.sh/uv/) as its package manager. It is also the recommended tool to run Marc while plans to make it installable via `pip` are underway.
 
-Three primary APIs are required to use Marc: [OpenAI](https://platform.openai.com/) (or any other LLM provider), [Tavily](https://www.tavily.com/), and [Mem0](https://www.tavily.com/). Tavily and Mem0 have generous free tiers (at least for my usage). While you will have to bring your own API key for OpenAI's ChatGPT models, they do have a [data sharing tier](https://help.openai.com/en/articles/10306912-sharing-feedback-evaluation-and-fine-tuning-data-and-api-inputs-and-outputs-with-openai) which grants you a certain amount of tokens daily for free.
+Three primary APIs are required to use Marc: [OpenAI](https://platform.openai.com/) (or any other LLM provider), [Tavily](https://www.tavily.com/), and [Mem0](https://www.tavily.com/). Tavily and Mem0 have generous free tiers (at least for my usage). While you will have to bring your own API key for OpenAI's ChatGPT models, they do have a [data sharing tier](https://help.openai.com/en/articles/10306912-sharing-feedback-evaluation-and-fine-tuning-data-and-api-inputs-and-outputs-with-openai#h_f2f71332e6) which grants you a certain amount of free tokens daily.
 
 1. Install uv by following [these](https://docs.astral.sh/uv/getting-started/installation/) instructions.
 2. Install Marc's dependencies by running the command `uv sync` in your shell.
