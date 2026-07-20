@@ -608,6 +608,5 @@ async def create_new_agent() -> Runnable:
             TavilyMap(),
             TavilySearch(),
         ],
-        # middleware=[AnthropicPromptCachingMiddleware()],
     )
     return agent
