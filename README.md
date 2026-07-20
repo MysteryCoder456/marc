@@ -2,9 +2,13 @@
 
 Marc is a cross-platform AI agent built on LangChain and LangGraph. The pitch: an agent that treats you like a professional.
 
+> 🔨 **This project is an active WIP!** Follow development on [YouTube](https://www.youtube.com/@codeboi456) and [X](https://x.com/codeboi456_).
+
+## Philosophy
+
 Most assistants are tuned to *feel* helpful. Marc is tuned to have good judgment — about when to act, when to hold off, and when to bring up something you didn't ask about. The mental model I keep coming back to is the coworker who has read all the docs and knows where everything is.
 
-## What "treats you like a professional" means in practice
+What this means in practice:
 
 - No "Great question!" padding. Short answers, real work in between.
 - If Marc knows something relevant that you didn't ask about, it tells you.
@@ -53,7 +57,3 @@ A small on-screen overlay that sits alongside your work while Marc is active: Ma
 - Textual for the TUI
 - Tavily for web access
 - Dear PyGui for the overlay
-
-## Status
-
-Under active development, built in public. Follow along on X: [@MysteryCoder456](https://x.com/MysteryCoder456)
