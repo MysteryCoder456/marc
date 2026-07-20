@@ -1,6 +1,6 @@
 # Marc
 
-Marc is a cross-platform AI agent built on LangChain and LangGraph. The pitch: an agent that treats you like a professional.
+Marc is a cross-platform AI agent built on LangChain. The pitch: an agent that treats you like a professional.
 
 > 🔨 **This project is an active WIP!** Follow development on [YouTube](https://www.youtube.com/@codeboi456) and [X](https://x.com/codeboi456_).
 
@@ -39,7 +39,7 @@ Marc uses the full [Tavily](https://tavily.com) toolset (Search, Extract, Map, C
 Marc can run shell commands for local work. Fair warning: this is the roughest part of the project right now. Commands run without asking you first, and there's no sandbox. I'd recommend going in and disabling shell tools in `marc/agent/__init__.py` if you're going to try Marc until permission interrupts are implemented.
 
 ### 🪟 Work-mode overlay
-A small on-screen overlay that sits alongside your work while Marc is active: Marc's face as he works, his reasoning streaming live, and a panel showing the current session's tasks. It checks in with you periodically as it works.
+A small on-screen overlay that sits alongside your work while Marc is active: Marc's face as it works, reasoning streaming live, and a panel showing the current session's tasks. It checks in with you periodically as it works.
 
 ## Not done yet
 
@@ -48,6 +48,18 @@ A small on-screen overlay that sits alongside your work while Marc is active: Ma
 - **Observation** — the idea is that Marc can watch your work sessions and learn your routines well enough to notice patterns you didn't point out. Still in design; I'm working through the trade-off between always-on observation (more signal) and opt-in, session-scoped observation (better for privacy).
 - **Recall-driven proactivity** — Marc surfacing your own past work when it's relevant again, like a data structure you designed weeks ago and forgot about.
 - **Memory provenance** — tracking where memories came from, how confident Marc is in them, and when they were last confirmed.
+
+## Installation & Usage
+
+Marc uses [uv](https://docs.astral.sh/uv/) as its package manager. It is also the recommended tool to run Marc while plans to make it installable via `pip` are underway.
+
+Three primary APIs are required to use Marc: [OpenAI](https://platform.openai.com/) (or any other LLM provider), [Tavily](https://www.tavily.com/), and [Mem0](https://www.tavily.com/). Tavily and Mem0 have generous free tiers (at least for my usage). While you will have to bring your own API key for OpenAI's ChatGPT models, they do have a [data sharing tier](https://help.openai.com/en/articles/10306912-sharing-feedback-evaluation-and-fine-tuning-data-and-api-inputs-and-outputs-with-openai) which grants you a certain amount of tokens daily for free.
+
+1. Install uv by following [these](https://docs.astral.sh/uv/getting-started/installation/) instructions.
+2. Install Marc's dependencies by running the command `uv sync` in your shell.
+3. Create a copy of `example.env` called `.env`, and fill in your API keys.
+4. Run `uv run -m marc` in your shell to start Marc.
+5. (Optional) Run `uv run textual console`, then start `uv run textual run --dev marc` in another shell. This will allow you to see print statements and other debugging information.
 
 ## Stack
 
