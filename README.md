@@ -4,6 +4,20 @@ Marc is a cross-platform AI agent built on LangChain. The pitch: an agent that t
 
 > 🔨 **This project is an active WIP!** Follow development on [YouTube](https://www.youtube.com/@codeboi456) and [X](https://x.com/codeboi456_).
 
+## Table of Contents
+
+- [Philosophy](#philosophy)
+- [What it can do](#what-it-can-do)
+  - [🧠 Memory](#-memory)
+  - [🌙 Dreaming](#-dreaming)
+  - [🖥️ Computer use](#️-computer-use)
+  - [🔎 Web research](#-web-research)
+  - [⚡ Shell access](#-shell-access)
+  - [🪟 Work-mode overlay](#-work-mode-overlay)
+- [Not done yet](#not-done-yet)
+- [Installation & Usage](#installation--usage)
+- [Stack](#stack)
+
 ## Philosophy
 
 Most assistants are tuned to *feel* helpful. Marc is tuned to have good judgment — about when to act, when to hold off, and when to bring up something you didn't ask about. The mental model I keep coming back to is the coworker who has read all the docs and knows where everything is.
