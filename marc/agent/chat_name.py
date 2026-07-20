@@ -9,7 +9,7 @@ class ChatNameOutput(BaseModel):
 
 
 async def generate_chat_name(messages: list[AnyMessage]) -> str:
-    model = ChatOpenAI(model="gpt-5.4-nano", reasoning={"effort": "none"})
+    model = ChatOpenAI(model="gpt-5.6-luna", reasoning={"effort": "none"})
     agent = create_agent(
         model=model,
         system_prompt="Name the following chat conversation. Reply with only the name: at most 5 words, capturing the conversation's main topic.",
