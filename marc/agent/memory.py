@@ -3,8 +3,8 @@ from typing import TYPE_CHECKING, ClassVar, final
 
 from anyio import Path
 from langchain.agents import create_agent
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AnyMessage
+from langchain_openai import ChatOpenAI
 from mem0 import AsyncMemoryClient
 from pydantic import BaseModel
 
@@ -43,8 +43,9 @@ class ShortTermMemory:
     async def _generate_chat_summary(
         cls, messages: list[AnyMessage]
     ) -> list[str]:
-        model = ChatAnthropic(
-            model="claude-haiku-4-5",  # pyright: ignore[reportCallIssue]
+        model = ChatOpenAI(
+            model="gpt-5.6-luna",
+            reasoning={"effort": "none"},
         )
         system_prompt = (
             "Summarize this conversation as bullet points for a daily activity log.\n\n"
@@ -81,8 +82,9 @@ class ShortTermMemory:
     ) -> str:
         current_summaries = await cls.read()
 
-        model = ChatAnthropic(
-            model="claude-haiku-4-5",  # pyright: ignore[reportCallIssue]
+        model = ChatOpenAI(
+            model="gpt-5.6-luna",
+            reasoning={"effort": "none"},
         )
         system_prompt = (
             "You maintain a daily activity log. Each session entry uses this format:\n\n"

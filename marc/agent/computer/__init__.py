@@ -5,8 +5,6 @@ from typing import Annotated, Literal
 
 from langchain.agents import create_agent
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
-from langchain_anthropic import ChatAnthropic
-from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 from langchain_core.messages import ImageContentBlock, ToolMessage
 from langchain_core.messages.content import create_image_block
 from langchain_openai import ChatOpenAI
@@ -301,15 +299,6 @@ def create_computer_use_agent():
         reasoning={"effort": "none"},
         temperature=0.5,
     )
-    # model = ChatAnthropic(
-    #     model="claude-haiku-4-5",  # pyright: ignore[reportCallIssue]
-    #     effort="low",
-    #     temperature=0.5,
-    # )
-
-    middleware = []
-    if isinstance(model, ChatAnthropic):
-        middleware.extend([AnthropicPromptCachingMiddleware()])
 
     agent = create_agent(
         model=model,
@@ -322,6 +311,5 @@ def create_computer_use_agent():
             press_key,
             wait,
         ],
-        middleware=middleware,
     )
     return agent
