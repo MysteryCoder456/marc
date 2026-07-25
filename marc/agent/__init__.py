@@ -24,6 +24,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from .computer import ComputerContext, create_computer_use_agent
 from .context import RuntimeContext
 from .memory import LongTermMemory, ShortTermMemory, UserMemory
+from .skills import Skill, SkillLoader
 from .tasks import Task, TaskStatus
 
 SYSTEM_PROMPT_TEMPLATE = Template("""# Marc System Prompt
@@ -246,7 +247,29 @@ rest of the chat, so:
   own judgment of relevance and recency, not for quoting to the user.
 - There is no write tool for LTM. It is consolidated automatically — never
   tell the user you've "remembered" something into it.
+
+## Skills
+
+The skills below provide specialized instructions for specific tasks. When
+a task matches a skill's description, use `read_file` to load the `SKILL.md`
+at the listed location before proceeding, and follow its instructions in
+place of your default approach. Read it once — the contents stay visible in
+the conversation afterwards.
+
+When a skill references relative paths, resolve them against the skill's
+directory (the parent of `SKILL.md`) and use absolute paths in tool calls.
+Read those supporting files only when the step that needs them comes up.
+
+Available skills:
+
+$skill_catalog
 """)
+
+SKILL_CATALOG_TEMPLATE = Template("""- `$name`:
+  - Description: $description
+  - Location: `$location`""")
+
+skills: dict[str, Skill] = {}
 
 
 @tool
@@ -575,9 +598,24 @@ async def create_new_agent() -> Runnable:
         UserMemory.read(), ShortTermMemory.read()
     )
 
+    # Create skill catalog
+    available_skills = await SkillLoader.discover()
+    skill_catalog = []
+    for skill in available_skills:
+        catalog_item = SKILL_CATALOG_TEMPLATE.substitute(
+            name=skill.name,
+            description=skill.description,
+            location=skill.location,
+        )
+        skill_catalog.append(catalog_item)
+
+    global skills
+    skills = {s.name: s for s in available_skills}
+
     system_prompt = SYSTEM_PROMPT_TEMPLATE.substitute(
         user_memory=user_memory,
         short_term_memory=short_term_memory,
+        skill_catalog="\n".join(skill_catalog),
     )
     model = ChatOpenAI(
         model="gpt-5.6-terra",
