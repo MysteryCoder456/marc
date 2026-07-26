@@ -10,6 +10,8 @@ from langchain_core.messages import (
 from langchain_core.runnables import Runnable
 from textual import on, work
 from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.command import CommandPalette
 from textual.containers import Horizontal, VerticalGroup, VerticalScroll
 from textual.message import Message
 from textual.reactive import reactive
@@ -31,6 +33,7 @@ from marc.work.screen import WorkModeScreen
 
 from .indicator import RunningIndicator
 from .message import ChatMessageBlock, ToolCallBlock
+from .providers import SkillListProvider
 from .storage import ChatSession, ChatStorage
 
 
@@ -75,6 +78,7 @@ class ChatScreen(Screen):
     BINDINGS = [
         ("ctrl+o", "enable_work_mode", "Enable Work Mode"),
         ("ctrl+l", "toggle_context_panel", "Toggle Context Panel"),
+        Binding("/", "open_skill_picker", show=False, priority=True),
     ]
 
     session: reactive[ChatSession] = reactive(ChatSession, init=False)
@@ -101,40 +105,6 @@ class ChatScreen(Screen):
         scroller.scroll_end(animate=False)
 
     # ================ ↓ TEXTUAL FUNCTIONS ↓ ================
-
-    async def on_mount(self):
-        # Initialize agent
-        self.agent = await create_new_agent()
-
-        if self.chat_id and (ses := await ChatStorage.load_chat(self.chat_id)):
-            # Open existing chat
-            self.session = ses
-            self.is_context_loaded = False
-
-        else:
-            # Open new chat
-            self.chat_id = self.session.id
-
-        self.app.post_message(ChatScreen.Loaded(self.chat_id))
-
-        # Focus input
-        self.query_one("#chat-input").focus()
-
-    async def on_unmount(self):
-        # Don't do anything if conversation state hasn't changed
-        if not (
-            self.chat_id and self.session.messages and self.is_context_loaded
-        ):
-            return
-
-        # Clean up
-        save_coro = ChatStorage.save_chat(self.session)
-        stm_coro = ShortTermMemory.save(self.session)
-        self.run_worker(asyncio.gather(save_coro, stm_coro))
-
-        # Wait for clean up if we're closing entire app
-        if not self.app.is_running:
-            await self.workers.wait_for_complete()
 
     async def watch_session(self, session: ChatSession):
         self.session_context = deepcopy(self.session.context)
@@ -212,10 +182,57 @@ class ChatScreen(Screen):
     def action_toggle_context_panel(self):
         self.is_showing_context_panel = not self.is_showing_context_panel
 
+    def action_open_skill_picker(self):
+        self.app.push_screen(
+            CommandPalette(
+                [SkillListProvider], placeholder="Search for skills…"
+            )
+        )
+
+    async def on_mount(self):
+        # Initialize agent
+        self.agent = await create_new_agent()
+
+        if self.chat_id and (ses := await ChatStorage.load_chat(self.chat_id)):
+            # Open existing chat
+            self.session = ses
+            self.is_context_loaded = False
+
+        else:
+            # Open new chat
+            self.chat_id = self.session.id
+
+        self.app.post_message(ChatScreen.Loaded(self.chat_id))
+
+        # Focus input
+        self.query_one("#chat-input").focus()
+
+    async def on_unmount(self):
+        # Don't do anything if conversation state hasn't changed
+        if not (
+            self.chat_id and self.session.messages and self.is_context_loaded
+        ):
+            return
+
+        # Clean up
+        save_coro = ChatStorage.save_chat(self.session)
+        stm_coro = ShortTermMemory.save(self.session)
+        self.run_worker(asyncio.gather(save_coro, stm_coro))
+
+        # Wait for clean up if we're closing entire app
+        if not self.app.is_running:
+            await self.workers.wait_for_complete()
+
+    @on(SkillListProvider.SkillSelected)
+    def on_skill_selected(self, event: SkillListProvider.SkillSelected):
+        chat_input = self.query_one("#chat-input", Input)
+        chat_input.insert_text_at_cursor(f"/{event.skill_name}")
+
     @on(Input.Submitted, "#chat-input")
     def on_chat_input_submitted(self, event: Input.Submitted):
         msg = event.value
-        if not msg:
+        event.control.validate(msg)
+        if not event.control.is_valid:
             return
 
         # Reset input
