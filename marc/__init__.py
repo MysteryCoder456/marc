@@ -1,18 +1,17 @@
 from collections.abc import Iterable
-from functools import partial
 from typing import final, override
 from uuid import UUID
 
 from dotenv import load_dotenv
 from textual import on
 from textual.app import App, SystemCommand
-from textual.command import CommandPalette, DiscoveryHit, Hit, Hits, Provider
+from textual.command import CommandPalette
 from textual.screen import Screen
 from textual.widgets import Static
 
 from marc.agent.memory import LongTermMemory
+from marc.chat.providers import ChatListProvider
 from marc.chat.screen import ChatScreen
-from marc.chat.storage import ChatSession, ChatStorage
 from marc.dream.screen import DreamModeScreen
 from marc.work.screen import WorkModeScreen
 
@@ -27,45 +26,6 @@ class Smiley(Static):
         ─╯
 """
         )
-
-
-@final
-class ChatListProvider(Provider):
-    chats: list[ChatSession] = []
-
-    @override
-    async def startup(self) -> None:
-        self.chats = await ChatStorage.list_chats()
-
-    @override
-    async def search(self, query: str) -> Hits:
-        assert isinstance(self.app, MarcApp)
-        matcher = self.matcher(query)
-
-        for chat in self.chats:
-            if chat.id == self.app.current_chat:
-                continue
-
-            score = matcher.match(chat.name or "Untitled")
-            if score > 0:
-                yield Hit(
-                    score,
-                    matcher.highlight(chat.name or "Untitled"),
-                    partial(self.app.open_chat, chat.id),
-                )
-
-    @override
-    async def discover(self) -> Hits:
-        assert isinstance(self.app, MarcApp)
-
-        for chat in self.chats:
-            if chat.id == self.app.current_chat:
-                continue
-
-            yield DiscoveryHit(
-                chat.name or "Untitled",
-                partial(self.app.open_chat, chat.id),
-            )
 
 
 @final
@@ -111,9 +71,8 @@ class MarcApp(App):
 
     @override
     def get_system_commands(self, screen: Screen) -> Iterable[SystemCommand]:
-        if (
-            len(self.screen_stack) > 1
-            and isinstance(self.screen_stack[-2], WorkModeScreen)
+        if len(self.screen_stack) > 1 and isinstance(
+            self.screen_stack[-2], WorkModeScreen
         ):
             return
 

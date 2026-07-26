@@ -269,7 +269,11 @@ SKILL_CATALOG_TEMPLATE = Template("""- `$name`:
   - Description: $description
   - Location: `$location`""")
 
-skills: dict[str, Skill] = {}
+_available_skills: dict[str, Skill] = {}
+
+
+def get_available_skills() -> list[str]:
+    return list(_available_skills.keys())
 
 
 @tool
@@ -599,9 +603,10 @@ async def create_new_agent() -> Runnable:
     )
 
     # Create skill catalog
-    available_skills = await SkillLoader.discover()
-    skill_catalog = []
-    for skill in available_skills:
+    global _available_skills
+    _available_skills = {s.name: s for s in await SkillLoader.discover()}
+    skill_catalog: list[str] = []
+    for skill in _available_skills.values():
         catalog_item = SKILL_CATALOG_TEMPLATE.substitute(
             name=skill.name,
             description=skill.description,
@@ -609,13 +614,12 @@ async def create_new_agent() -> Runnable:
         )
         skill_catalog.append(catalog_item)
 
-    global skills
-    skills = {s.name: s for s in available_skills}
-
     system_prompt = SYSTEM_PROMPT_TEMPLATE.substitute(
         user_memory=user_memory,
         short_term_memory=short_term_memory,
-        skill_catalog="\n".join(skill_catalog),
+        skill_catalog=(
+            "\n".join(skill_catalog) if skill_catalog else "**(no skills)**"
+        ),
     )
     model = ChatOpenAI(
         model="gpt-5.6-terra",
