@@ -260,6 +260,14 @@ When a skill references relative paths, resolve them against the skill's
 directory (the parent of `SKILL.md`) and use absolute paths in tool calls.
 Read those supporting files only when the step that needs them comes up.
 
+### Activation
+
+The user activates a skill by naming it inline as `/name`, where `name` is a
+skill's name from the catalog. Treat it as an explicit instruction:
+load that skill's `SKILL.md` and follow it, even if you wouldn't have picked it
+yourself. The rest of the message is input to the skill, not a separate request.
+If no catalog entry matches the name, say so instead of guessing at a close one.
+
 Available skills:
 
 $skill_catalog
