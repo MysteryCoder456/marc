@@ -174,6 +174,6 @@ class LongTermMemory:
         stm = await ShortTermMemory.read()
         await cls.client.add(
             f"Here's a summary of our conversations from yesterday. Disregard information specifically about the user; only remember conversation/task details.\n\n{stm}",
-            app_id="cv.rehatsingh.marc",
+            app_id="com.rehatsingh.marc",
         )
         await ShortTermMemory.delete()

@@ -573,7 +573,7 @@ async def search_long_term_memory(query: str) -> list[dict[str, Any]]:  # pyrigh
     """
 
     result = await LongTermMemory.client.search(
-        query, filters={"app_id": "cv.rehatsingh.marc"}
+        query, filters={"app_id": "com.rehatsingh.marc"}
     )
     memories = result["results"]
     return memories
