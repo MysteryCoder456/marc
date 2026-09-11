@@ -5,6 +5,7 @@ from typing import final, override
 
 from textual import work
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import Footer, Label
 from textual.worker import Worker
@@ -16,7 +17,12 @@ from .messages import OverlayMessage, OverlayMessageType
 class WorkModeScreen(Screen):
     CSS_PATH = "styles.tcss"
     BINDINGS = [
-        ("ctrl+o", "disable_work_mode", "Disable Work Mode"),
+        Binding(
+            "ctrl+w",
+            "disable_work_mode",
+            "Disable Work Mode",
+            priority=True,
+        ),
     ]
 
     def __init__(self) -> None:
