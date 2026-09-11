@@ -24,6 +24,7 @@ from marc.agent import create_new_agent
 from marc.agent.chat_name import generate_chat_name
 from marc.agent.context import RuntimeContext, create_runtime_context
 from marc.agent.memory import ShortTermMemory
+from marc.agent.observation.observer import Observer
 from marc.work.messages import (
     ReasoningMessage,
     TasksUpdatedMessage,
@@ -76,8 +77,14 @@ class ChatScreen(Screen):
 
     CSS_PATH = "styles.tcss"
     BINDINGS = [
-        ("ctrl+o", "enable_work_mode", "Enable Work Mode"),
+        Binding(
+            "ctrl+w",
+            "enable_work_mode",
+            "Enable Work Mode",
+            priority=True,
+        ),
         ("ctrl+l", "toggle_context_panel", "Toggle Context Panel"),
+        ("ctrl+o", "toggle_observation_mode", "Toggle Observation Mode"),
         Binding("/", "open_skill_picker", show=False, priority=True),
     ]
 
@@ -88,6 +95,7 @@ class ChatScreen(Screen):
 
     is_agent_running = reactive(False, init=False)
     is_showing_context_panel = reactive(False, init=False)
+    is_observer_running = reactive(False, init=False)
 
     def __init__(self, chat_id: UUID | None = None) -> None:
         super().__init__()
@@ -182,6 +190,14 @@ class ChatScreen(Screen):
     def action_toggle_context_panel(self):
         self.is_showing_context_panel = not self.is_showing_context_panel
 
+    def action_toggle_observation_mode(self):
+        self.is_observer_running = not self.is_observer_running
+
+        if self.is_observer_running:
+            Observer.enter_observation_mode(self.app)
+        else:
+            Observer.exit_observation_mode()
+
     def action_open_skill_picker(self):
         self.app.push_screen(
             CommandPalette(
@@ -256,6 +272,11 @@ class ChatScreen(Screen):
             case _:
                 self.is_agent_running = False
                 self.scroll_to_end()
+
+    @on(Observer.Forward)
+    def on_observer_forward(self, event: Observer.Forward):
+        # TODO: queue a message to agent with the forwarded content
+        ...
 
     @work(name="agent_message")
     async def send_message_to_agent(self, msg: str):
