@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import ClassVar, final
 
 from mss import MSS, ScreenShot
+from PIL import Image, ImageChops
 from pynput import keyboard, mouse
 from textual import log
 from textual.app import App
@@ -31,6 +32,7 @@ class Observer:
     _state: ClassVar[ObserverState | None] = None
     _task: ClassVar[asyncio.Task | None] = None
     _last_input_ts: ClassVar[float] = 0
+    _prev_screens: ClassVar[list[ScreenShot]] = []
 
     @classmethod
     def is_running(cls) -> bool:
@@ -59,8 +61,37 @@ class Observer:
 
     @classmethod
     async def _screenshot_gate(cls, screens: list[ScreenShot]) -> bool:
-        # TODO: implement
-        ...
+        try:
+            # different number of screens? check them
+            if len(screens) != len(cls._prev_screens):
+                return True
+
+            screen_zip = zip(screens, cls._prev_screens, strict=True)
+            for screen, prev_screen in screen_zip:
+                # cross-check dimensions
+                if screen.size != prev_screen:
+                    return True
+
+                screen_pil = Image.frombytes("RGB", screen.size, screen.rgb)
+                prev_screen_pil = Image.frombytes(
+                    "RGB", screen.size, screen.rgb
+                )
+                diff = ImageChops.difference(screen_pil, prev_screen_pil)
+
+                # check proportion of changed area
+                def tf(x: int) -> float:
+                    return int(x >= 50) * 255
+
+                screen_area = diff.size[0] * diff.size[1]
+                changed = diff.point(tf).histogram()[255]
+                if changed / screen_area >= 0.05:
+                    # more than 5% of area was changed
+                    return True
+
+            return False
+
+        finally:
+            cls._prev_screens = screens
 
     @classmethod
     async def _actionable_gate(cls, context: str) -> bool:
