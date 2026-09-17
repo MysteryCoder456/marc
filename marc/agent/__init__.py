@@ -4,7 +4,7 @@ import platform
 import subprocess
 from pathlib import Path
 from string import Template
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
 
 from anyio import Path as AsyncPath
@@ -26,6 +26,7 @@ from .context import RuntimeContext
 from .memory import LongTermMemory, ShortTermMemory, UserMemory
 from .skills import Skill, SkillLoader
 from .tasks import Task, TaskStatus
+from .utils import search_long_term_memory
 
 SYSTEM_PROMPT_TEMPLATE = Template("""# Marc System Prompt
 
@@ -559,31 +560,6 @@ async def write_user_memory(memory: str):
     """
 
     await UserMemory.write(memory)
-
-
-@tool
-async def search_long_term_memory(query: str) -> list[dict[str, Any]]:  # pyright: ignore[reportExplicitAny]
-    """
-    Semantically search long-term memory for facts about past projects and
-    decisions from before today. Today's activity is already in Short-Term
-    Memory in the system prompt — search this only when that isn't enough.
-    Contains no facts about the user.
-
-    Args:
-        query: A specific, descriptive query — a topic, project, or
-            decision, not the user's raw message.
-
-    Returns:
-        Matching memories, most relevant first. Each item carries the
-        memory text under "memory" plus metadata such as "score" and
-        timestamps — heavier than a plain string, so search selectively.
-    """
-
-    result = await LongTermMemory.client.search(
-        query, filters={"app_id": "com.rehatsingh.marc"}
-    )
-    memories = result["results"]
-    return memories
 
 
 @tool
