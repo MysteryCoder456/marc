@@ -1,12 +1,9 @@
-import io
 from asyncio import sleep
-from base64 import b64encode
 from typing import Annotated, Literal
 
 from langchain.agents import create_agent
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
-from langchain_core.messages import ImageContentBlock, ToolMessage
-from langchain_core.messages.content import create_image_block
+from langchain_core.messages import ToolMessage
 from langchain_openai import ChatOpenAI
 from mss import MSS, ScreenShot
 from PIL import Image
@@ -14,6 +11,8 @@ from pydantic.dataclasses import dataclass
 from pynput.keyboard import Controller as KeyboardController
 from pynput.mouse import Button
 from pynput.mouse import Controller as MouseController
+
+from marc.agent.utils import convert_to_img_block
 
 from .modifier_key import MODIFIER_KEY_MAP, ModifierKey
 
@@ -160,9 +159,7 @@ def take_screenshot(
             sct.grab(monitor) for monitor in monitors
         ]
 
-    def convert(sct_img: ScreenShot) -> ImageContentBlock:
-        img = Image.frombytes("RGB", sct_img.size, sct_img.rgb)
-
+    def resize_img(img: Image.Image) -> Image.Image:
         # Downscale to TARGET_WIDTH (never upscale) so the model receives a
         # smaller image, and record how much it was shrunk so click_mouse can map
         # the model's coordinates back to native screen pixels.
@@ -176,19 +173,16 @@ def take_screenshot(
         else:
             runtime.context.scale_factor = 1.0
 
-        # Save image data into a buffer
-        buf = io.BytesIO()
-        img.save(buf, format="JPEG", optimize=True)
-        img_bytes = buf.getvalue()
+        return img
 
-        return create_image_block(
-            base64=b64encode(img_bytes).decode("utf-8"),
-            mime_type="image/jpeg",
-            detail="original",
+    blocks = [
+        convert_to_img_block(
+            resize_img(Image.frombytes("RGB", sct_img.size, sct_img.rgb))
         )
-
+        for sct_img in sct_imgs
+    ]
     return ToolMessage(
-        content_blocks=[convert(img) for img in sct_imgs],
+        content_blocks=blocks,  # pyright: ignore[reportArgumentType]
         name=take_screenshot.name,
         tool_call_id=tool_call_id,
     )
