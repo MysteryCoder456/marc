@@ -22,6 +22,12 @@ ContextPanel {
     }
 }
 
+#message-queue {
+    padding-left: 1;
+    padding-right: 1;
+    background: $secondary-background;
+}
+
 #bottom-dock {
     dock: bottom;
 }

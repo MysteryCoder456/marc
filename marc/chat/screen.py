@@ -17,8 +17,7 @@ from textual.message import Message
 from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widget import Widget
-from textual.widgets import Footer, Input, Tree
-from textual.worker import Worker, WorkerState
+from textual.widgets import Footer, Input, Label, Tree
 
 from marc.agent import create_new_agent
 from marc.agent.chat_name import generate_chat_name
@@ -91,6 +90,9 @@ class ChatScreen(Screen):
     session: reactive[ChatSession] = reactive(ChatSession, init=False)
     session_context: reactive[RuntimeContext] = reactive(
         create_runtime_context, init=False
+    )
+    user_msg_queue: reactive[asyncio.Queue[str]] = reactive(
+        asyncio.Queue, init=False
     )
 
     is_agent_running = reactive(False, init=False)
@@ -165,6 +167,13 @@ class ChatScreen(Screen):
 
         self.scroll_to_end()
 
+    async def watch_user_msg_queue(self, queue: asyncio.Queue[str]):
+        queue_container = self.query_one("#message-queue")
+        await queue_container.remove_children()
+        await queue_container.mount_all(
+            [Label(f"» {msg}") for msg in queue._queue]  # pyright: ignore[reportAttributeAccessIssue]
+        )
+
     def watch_is_agent_running(self, running: bool):
         indicator = self.query_one(RunningIndicator)
 
@@ -223,6 +232,9 @@ class ChatScreen(Screen):
         # Focus input
         self.query_one("#chat-input").focus()
 
+        # start message queue processing
+        self.send_message_to_agent()
+
     async def on_unmount(self):
         # Don't do anything if conversation state hasn't changed
         if not (
@@ -245,7 +257,7 @@ class ChatScreen(Screen):
         chat_input.insert_text_at_cursor(f"/{event.skill_name}")
 
     @on(Input.Submitted, "#chat-input")
-    def on_chat_input_submitted(self, event: Input.Submitted):
+    async def on_chat_input_submitted(self, event: Input.Submitted):
         msg = event.value
         event.control.validate(msg)
         if not event.control.is_valid:
@@ -255,104 +267,106 @@ class ChatScreen(Screen):
         event.control.value = ""
         event.control.focus()
 
-        self.send_message_to_agent(msg)
-
-    @on(Worker.StateChanged)
-    def on_agent_worker_state_changed(self, event: Worker.StateChanged):
-        if event.worker.name != "agent_message":
-            return
-
-        match event.state:
-            case WorkerState.PENDING:
-                pass
-
-            case WorkerState.RUNNING:
-                self.is_agent_running = True
-
-            case _:
-                self.is_agent_running = False
-                self.scroll_to_end()
+        # Queue message
+        await self.user_msg_queue.put(msg)
+        self.mutate_reactive(ChatScreen.user_msg_queue)
+        self.scroll_to_end()
 
     @on(Observer.Forward)
-    def on_observer_forward(self, event: Observer.Forward):
-        # TODO: queue a message to agent with the forwarded content
-        ...
+    async def on_observer_forward(self, event: Observer.Forward):
+        # Queue a message to agent with the forwarded content
+        await self.user_msg_queue.put(
+            f"FROM OBSERVER AGENT:\n\n{event.content}"
+        )
+        self.mutate_reactive(ChatScreen.user_msg_queue)
 
     @work(name="agent_message")
-    async def send_message_to_agent(self, msg: str):
-        # Construct query
-        query_messages: list[AnyMessage | dict[str, str]] = [
-            {"role": "user", "content": msg}
-        ]
-        if not self.is_context_loaded:
-            # Inject session's previous messages into context
-            query_messages = self.session.messages + query_messages
-            self.is_context_loaded = True
+    async def send_message_to_agent(self):
+        while msg := await self.user_msg_queue.get():
+            self.mutate_reactive(ChatScreen.user_msg_queue)
 
-        context_hash = hash(self.session.context)
-        wms = self.app.get_screen("work_mode", WorkModeScreen)
+            # Construct query
+            query_messages: list[AnyMessage | dict[str, str]] = [
+                {"role": "user", "content": msg}
+            ]
+            if not self.is_context_loaded:
+                # Inject session's previous messages into context
+                query_messages = self.session.messages + query_messages
+                self.is_context_loaded = True
 
-        try:
-            # Send message to agent
-            next_msg_idx = len(self.session.messages)
-            response = self.agent.astream(
-                {"messages": query_messages},
-                {"configurable": {"thread_id": self.chat_id}},
-                stream_mode="values",
-                context=self.session.context,
-            )
+            context_hash = hash(self.session.context)
+            wms = self.app.get_screen("work_mode", WorkModeScreen)
 
-            # Stream agent responses
-            async for chunk in response:
-                # Update UI if context changed
-                new_context_hash = hash(self.session.context)
-                if new_context_hash != context_hash:
-                    self.mutate_reactive(ChatScreen.session)
-                    context_hash = new_context_hash
+            # Beginning turn
+            self.is_agent_running = True
 
-                chunk_msgs = chunk["messages"]
-                new_msgs: list[AnyMessage] = chunk_msgs[next_msg_idx:]
-                if not new_msgs:
-                    continue
-
-                # Send reasoning to overlay
-                reasonings = []
-                for block in new_msgs[-1].content_blocks:
-                    if block["type"] != "reasoning":
-                        continue
-
-                    block_reasoning = (
-                        str(block.get("reasoning")).replace("*", "").strip()
-                    )
-                    if block_reasoning:
-                        reasonings.append(block_reasoning)
-                if reasonings:
-                    reasoning = ", ".join(reasonings).capitalize()
-                    self.run_worker(
-                        wms.send_message(ReasoningMessage(content=reasoning))
-                    )
-
-                self.session.messages.extend(new_msgs)
-                self.mutate_reactive(ChatScreen.session)
-
-                next_msg_idx = len(chunk_msgs)
-
-        except Exception as e:
-            self.log(e)
-            raise
-
-        # Signal to overlay that we're done
-        self.run_worker(wms.send_message(TurnFinishedMessage()))
-
-        # Generate a name for this session
-        if not self.session.name:
-
-            async def name_work():
-                self.session.name = await generate_chat_name(
-                    self.session.messages
+            try:
+                # Send message to agent
+                next_msg_idx = len(self.session.messages)
+                response = self.agent.astream(
+                    {"messages": query_messages},
+                    {"configurable": {"thread_id": self.chat_id}},
+                    stream_mode="values",
+                    context=self.session.context,
                 )
 
-            self.run_worker(name_work())
+                # Stream agent responses
+                async for chunk in response:
+                    # Update UI if context changed
+                    new_context_hash = hash(self.session.context)
+                    if new_context_hash != context_hash:
+                        self.mutate_reactive(ChatScreen.session)
+                        context_hash = new_context_hash
+
+                    chunk_msgs = chunk["messages"]
+                    new_msgs: list[AnyMessage] = chunk_msgs[next_msg_idx:]
+                    if not new_msgs:
+                        continue
+
+                    # Send reasoning to overlay
+                    reasonings = []
+                    for block in new_msgs[-1].content_blocks:
+                        if block["type"] != "reasoning":
+                            continue
+
+                        block_reasoning = (
+                            str(block.get("reasoning"))
+                            .replace("*", "")
+                            .strip()
+                        )
+                        if block_reasoning:
+                            reasonings.append(block_reasoning)
+                    if reasonings:
+                        reasoning = ", ".join(reasonings).capitalize()
+                        self.run_worker(
+                            wms.send_message(
+                                ReasoningMessage(content=reasoning)
+                            )
+                        )
+
+                    self.session.messages.extend(new_msgs)
+                    self.mutate_reactive(ChatScreen.session)
+
+                    next_msg_idx = len(chunk_msgs)
+
+            except Exception as e:
+                self.log(e)
+                raise
+
+            # Turn is over
+            self.run_worker(wms.send_message(TurnFinishedMessage()))
+            self.is_agent_running = False
+            self.scroll_to_end()
+
+            # Generate a name for this session
+            if not self.session.name:
+
+                async def name_work():
+                    self.session.name = await generate_chat_name(
+                        self.session.messages
+                    )
+
+                self.run_worker(name_work())
 
     @override
     def compose(self) -> ComposeResult:
@@ -364,5 +378,6 @@ class ChatScreen(Screen):
             yield ContextPanel().data_bind(context=ChatScreen.session_context)
 
         with VerticalGroup(id="bottom-dock"):
+            yield VerticalGroup(id="message-queue")
             yield Input(placeholder="Chat", id="chat-input")
-            yield Footer()
+            yield Footer(compact=True)
