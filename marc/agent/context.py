@@ -20,7 +20,9 @@ class RuntimeContext:
         if not isinstance(value, RuntimeContext):
             return False
 
-        return self.cwd == value.cwd and self.current_tasks == value.current_tasks
+        return (
+            self.cwd == value.cwd and self.current_tasks == value.current_tasks
+        )
 
 
 def create_runtime_context() -> RuntimeContext:
