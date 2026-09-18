@@ -242,6 +242,10 @@ class ChatScreen(Screen):
         ):
             return
 
+        # Disable observation if active
+        if self.is_observer_running:
+            Observer.exit_observation_mode()
+
         # Clean up
         save_coro = ChatStorage.save_chat(self.session)
         stm_coro = ShortTermMemory.save(self.session)
