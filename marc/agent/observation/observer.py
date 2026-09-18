@@ -90,12 +90,11 @@ class Observer:
 
                 # check proportion of changed area
                 def tf(x: int) -> float:
-                    return int(x >= 50) * 255
+                    return int(x >= 100) * 255
 
                 screen_area = diff.size[0] * diff.size[1]
                 changed = diff.point(tf).histogram()[255]
-                if changed / screen_area >= 0.05:
-                    # more than 5% of area was changed
+                if changed / screen_area >= 0.25:  # proportion of area changed
                     return True
 
             return False
@@ -231,19 +230,13 @@ class Observer:
         if not await cls._screenshot_gate(scts):
             return
 
-        print("i like this screenshot")
-
         # analyze grabbed screenshots
         analysis = await cls._analyze_screenshots(scts)
         cls._state.analysis_log.append(analysis)
 
-        print("screenshot analysis:", analysis)
-
         surfaceable = await cls._find_surfaceable_context(analysis)
         if not surfaceable:
             return
-
-        print("found context:", surfaceable)
 
         # forward actionable context to main agent
         cls._forward_to_agent(surfaceable)
@@ -257,8 +250,7 @@ class Observer:
                 iter_end = time.time()
                 iter_duration = iter_end - iter_start
 
-                # HACK: hardcoded iter rate to 1s
-                await asyncio.sleep(1.0 - iter_duration)
+                await asyncio.sleep(3.0 - iter_duration)
 
         except asyncio.CancelledError:
             print("Observer task loop cancelled!")
