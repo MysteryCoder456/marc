@@ -1,15 +1,15 @@
 import asyncio
 import time
+from concurrent.futures import Future
 from dataclasses import dataclass
 from typing import ClassVar, final
 
 from langchain.agents import create_agent
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from mss import MSS, ScreenShot
 from PIL import Image, ImageChops
 from pynput import keyboard, mouse
-from textual import log
 from textual.app import App
 from textual.message import Message
 
@@ -36,7 +36,7 @@ class Observer:
     MAX_IDLE_DURATION: float = 10.0  # seconds
 
     _state: ClassVar[ObserverState | None] = None
-    _task: ClassVar[asyncio.Task | None] = None
+    _task: ClassVar[Future | None] = None
     _last_input_ts: ClassVar[float] = 0
     _prev_screens: ClassVar[list[ScreenShot]] = []
 
@@ -46,7 +46,7 @@ class Observer:
 
     @classmethod
     def _get_model(cls) -> ChatOpenAI:
-        return ChatOpenAI(model="gpt-5.6-luna", reasoning={"effort": "low"})
+        return ChatOpenAI(model="gpt-5.6-luna", reasoning={"effort": "none"})
 
     @classmethod
     def _forward_to_agent(cls, content: str):
@@ -131,7 +131,15 @@ class Observer:
         ]
         msg = HumanMessage(content_blocks=blocks)  # pyright: ignore[reportArgumentType]
         response = await agent.ainvoke({"messages": [msg]})
-        return response["messages"][-1].content
+        response_msg: AIMessage = response["messages"][-1]
+        response_text = "\n".join(
+            [
+                block.get("text") or ""
+                for block in response_msg.content_blocks
+                if block.get("text") is not None
+            ]
+        )
+        return response_text
 
     @classmethod
     async def _find_surfaceable_context(cls, analysis: str) -> str | None:
@@ -190,7 +198,14 @@ class Observer:
         response = await agent.ainvoke(
             {"messages": [{"role": "human", "content": analysis}]}
         )
-        response_text = response["messages"][-1].content
+        response_msg: AIMessage = response["messages"][-1]
+        response_text = "\n".join(
+            [
+                block.get("text") or ""
+                for block in response_msg.content_blocks
+                if block.get("text") is not None
+            ]
+        )
 
         if response_text == "not found":
             return None
@@ -216,13 +231,19 @@ class Observer:
         if not await cls._screenshot_gate(scts):
             return
 
+        print("i like this screenshot")
+
         # analyze grabbed screenshots
         analysis = await cls._analyze_screenshots(scts)
         cls._state.analysis_log.append(analysis)
 
+        print("screenshot analysis:", analysis)
+
         surfaceable = await cls._find_surfaceable_context(analysis)
         if not surfaceable:
             return
+
+        print("found context:", surfaceable)
 
         # forward actionable context to main agent
         cls._forward_to_agent(surfaceable)
@@ -240,7 +261,7 @@ class Observer:
                 await asyncio.sleep(1.0 - iter_duration)
 
         except asyncio.CancelledError:
-            log("Observer task loop cancelled!")
+            print("Observer task loop cancelled!")
 
         finally:
             cls._task = None
@@ -249,11 +270,14 @@ class Observer:
     def _start_task(cls):
         cls._last_input_ts = time.time()
 
-        if cls._task:
+        if cls._task or not cls._state:
             return
 
-        loop = asyncio.get_running_loop()
-        cls._task = loop.create_task(cls._task_loop())
+        loop = cls._state.app._loop  # pyright: ignore[reportPrivateUsage]
+        if not loop:
+            print("App event loop doesn't exist. This should not happen.")
+            return
+        cls._task = asyncio.run_coroutine_threadsafe(cls._task_loop(), loop)
 
     @classmethod
     def _stop_task(cls):
@@ -264,7 +288,7 @@ class Observer:
     @classmethod
     def enter_observation_mode(cls, app: App):
         if cls._state:
-            log(
+            print(
                 "Tried to enter observation mode while observer is already running"
             )
             return
@@ -280,7 +304,9 @@ class Observer:
     @classmethod
     def exit_observation_mode(cls):
         if not cls._state:
-            log("Tried to exit observation mode while observer is not running")
+            print(
+                "Tried to exit observation mode while observer is not running"
+            )
             return
 
         # stop input listeners
