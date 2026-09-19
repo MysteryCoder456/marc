@@ -2,7 +2,7 @@ import asyncio
 import time
 from concurrent.futures import Future
 from dataclasses import dataclass
-from typing import ClassVar, final
+from typing import ClassVar, assert_never, final
 
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage
@@ -17,10 +17,43 @@ from ..memory import LongTermMemory, ShortTermMemory, UserMemory
 from ..utils import convert_to_img_block, search_long_term_memory
 
 
+@dataclass(frozen=True)
+class AnalysisEvent:
+    content: str
+
+
+@dataclass(frozen=True)
+class SurfacedContextEvent:
+    content: str
+
+
+type ObservationEvent = AnalysisEvent | SurfacedContextEvent
+
+
+def _format_surfaceability_log(events: list[ObservationEvent]) -> str:
+    lines = []
+    for i, event in enumerate(events):
+        if isinstance(event, AnalysisEvent):
+            label = "ANALYSIS"
+        elif isinstance(event, SurfacedContextEvent):
+            label = "SURFACED CONTEXT"
+        else:
+            assert_never(event)
+        lines.append(f"{i + 1}. {label}: {event.content}")
+    return "\n".join(lines)
+
+
+def _format_analysis_log(events: list[ObservationEvent]) -> str:
+    analyses = (event for event in events if isinstance(event, AnalysisEvent))
+    return "\n".join(
+        f"{i + 1}. {event.content}" for i, event in enumerate(analyses)
+    )
+
+
 @dataclass
 class ObserverState:
     app: App
-    analysis_log: list[str]
+    events: list[ObservationEvent]
     mouse_listener: mouse.Listener
     kb_listener: keyboard.Listener
 
@@ -49,23 +82,18 @@ class Observer:
         return ChatOpenAI(model="gpt-5.6-luna", reasoning={"effort": "none"})
 
     @classmethod
-    def _forward_to_agent(cls, content: str):
+    def _forward_to_agent(cls, content: str) -> bool:
         if not cls._state:
             raise ValueError("Observer state not set")
 
-        cls._state.app.screen.post_message(cls.Forward(content))
+        return cls._state.app.screen.post_message(cls.Forward(content))
 
     @classmethod
     def _forward_analysis(cls):
         if not cls._state:
             raise ValueError("Observer state not set")
 
-        bulleted_log = "\n".join(
-            [
-                f"{i + 1}. {line}"
-                for i, line in enumerate(cls._state.analysis_log)
-            ]
-        )
+        bulleted_log = _format_analysis_log(cls._state.events)
         final_forward = "# EXITING OBSERVATION MODE\n\n" + bulleted_log
         cls._forward_to_agent(final_forward)
 
@@ -142,6 +170,10 @@ class Observer:
 
     @classmethod
     async def _find_surfaceable_context(cls, analysis: str) -> str | None:
+        if not cls._state:
+            raise ValueError("Observer state not set")
+
+        surfaceability_log = _format_surfaceability_log(cls._state.events)
         user_memory, stm, ltm_index = await asyncio.gather(
             UserMemory.read(),
             ShortTermMemory.read(),
@@ -182,11 +214,21 @@ class Observer:
             "sentences addressed to Marc, naming which memory it came from. "
             "Recognizing the user's activity is not itself a reason to "
             "surface anything.\n\n"
+            "The current observation session's surfaceability transcript "
+            "is included at the end. Earlier `ANALYSIS:` entries are "
+            "supporting history that has already been evaluated. "
+            "`SURFACED CONTEXT:` "
+            "entries are the exact outputs already sent to Marc; do not "
+            "surface them again or surface substantially repetitive "
+            "context. The latest analysis is also provided separately as "
+            "the human message and remains your primary input.\n\n"
             "If memory holds nothing that meets that bar, return the phrase "
             "`not found` verbatim.\n\n"
             f"User Profile:\n{user_memory}\n\n"
             f"Short Term Memory:\n{stm}\n\n"
-            f"Long Term Memory Index:\n{ltm_index}"
+            f"Long Term Memory Index:\n{ltm_index}\n\n"
+            "Current Observation Session Transcript:\n"
+            f"{surfaceability_log}"
         )
         agent = create_agent(
             cls._get_model(),
@@ -232,14 +274,15 @@ class Observer:
 
         # analyze grabbed screenshots
         analysis = await cls._analyze_screenshots(scts)
-        cls._state.analysis_log.append(analysis)
+        cls._state.events.append(AnalysisEvent(analysis))
 
         surfaceable = await cls._find_surfaceable_context(analysis)
         if not surfaceable:
             return
 
         # forward actionable context to main agent
-        cls._forward_to_agent(surfaceable)
+        if cls._forward_to_agent(surfaceable):
+            cls._state.events.append(SurfacedContextEvent(surfaceable))
 
     @classmethod
     async def _task_loop(cls):
@@ -291,7 +334,12 @@ class Observer:
         kb_listener = keyboard.Listener(on_press=cls._start_task)
         kb_listener.start()
 
-        cls._state = ObserverState(app, [], mouse_listener, kb_listener)
+        cls._state = ObserverState(
+            app=app,
+            events=[],
+            mouse_listener=mouse_listener,
+            kb_listener=kb_listener,
+        )
 
     @classmethod
     def exit_observation_mode(cls):
