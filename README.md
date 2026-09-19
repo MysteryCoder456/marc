@@ -2,66 +2,45 @@
 
 Marc is a cross-platform AI agent built on LangChain. The pitch: an agent that treats you like a professional.
 
-> 🔨 **This project is an active WIP!** Follow development on [YouTube](https://www.youtube.com/@codeboi456) and [X](https://x.com/codeboi456_).
-
-## Table of Contents
-
-- [Philosophy](#philosophy)
-- [What it can do](#what-it-can-do)
-  - [🧠 Memory](#-memory)
-  - [🌙 Dreaming](#-dreaming)
-  - [🖥️ Computer use](#️-computer-use)
-  - [🔎 Web research](#-web-research)
-  - [⚡ Shell access](#-shell-access)
-  - [🪟 Work-mode overlay](#-work-mode-overlay)
-- [Not done yet](#not-done-yet)
-- [Installation & Usage](#installation--usage)
-- [Stack](#stack)
-
 ## Philosophy
 
-Most assistants are tuned to *feel* helpful. Marc is tuned to have good judgment — about when to act, when to hold off, and when to bring up something you didn't ask about. The mental model I keep coming back to is the coworker who has read all the docs and knows where everything is.
+I started Marc because I wanted an assistant that could do useful work without constantly getting in the way. It should know when to act, when to ask, and when something from an earlier conversation is worth bringing up. The closest comparison is a coworker who has read the docs, remembers what you've worked on, and doesn't need every bit of context explained again.
 
-What this means in practice:
+That leads to a few basic rules:
 
-- No "Great question!" padding. Short answers, real work in between.
-- If Marc knows something relevant that you didn't ask about, it tells you.
-- It assumes you know your own domain and doesn't over-explain.
-- It's frugal with its context window: reads what it needs, doesn't redo work it already did, keeps answers brief.
+- Skip canned enthusiasm and get to the answer.
+- Bring up relevant context, even when the user didn't explicitly ask for it.
+- Assume the user understands their own field instead of explaining everything from first principles.
+- Read only what's needed and avoid doing the same work twice.
 
-None of this comes from a personality gimmick or a tone setting. It's how the agent is built to make decisions.
+These are partly personality settings, but more so capabilities as well. They shape how Marc decides what to read, what to remember, and what to do.
 
-## What it can do
+## Capabilities
 
 ### 🧠 Memory
 Marc remembers things across sessions, in three layers:
 
 - **User profile** (`USER.md`) — a paragraph of stable facts about you, present in every session.
-- **Short-term memory** (`TODAY.md`) — a summarized, running log of every interaction with Marc, injected into every new session.
+- **Short-term memory** (`TODAY.md`) — a summarized, running log of every interaction with Marc you've had today, injected into every new session.
 - **Long-term memory** ([Mem0](https://mem0.ai)) — durable memory that Marc searches when older context becomes relevant.
 
 ### 🌙 Dreaming
-Once a day, before the first chat opens, Marc consolidates yesterday's short-term memory into long-term memory and starts a fresh daily log. You'll see a "Marc is Dreaming" screen while it happens. The point of doing it this way is that memory never shifts underneath you mid-conversation.
+Before the first chat of the day opens, Marc consolidates the previous day's short-term memory into long-term memory and starts a fresh daily log. A "Marc is Dreaming" screen is shown while this runs.
 
 ### 🖥️ Computer use
-For GUI tasks, Marc hands off to an internal subagent that can look at your screen and act on it. You give it a goal in plain language and get a plain-language report back. You never talk to subagents directly — the whole point is that you have one relationship, with Marc.
+For GUI tasks, Marc hands work off to an internal subagent that can view the screen and interact with it. It accepts a goal in plain language and returns a report to the main chat.
 
 ### 🔎 Web research
-Marc uses the full [Tavily](https://tavily.com) toolset (Search, Extract, Map, Crawl), starting with the cheapest tool that can answer and escalating only when needed. All web access goes through these tools. 
+Marc uses the full [Tavily](https://tavily.com) toolset: Search, Extract, Map, and Crawl. All web access goes through these tools.
 
 ### ⚡ Shell access
 Marc can run shell commands for local work. Fair warning: this is the roughest part of the project right now. Commands run without asking you first, and there's no sandbox. I'd recommend going in and disabling shell tools in `marc/agent/__init__.py` if you're going to try Marc until permission interrupts are implemented.
 
 ### 🪟 Work-mode overlay
-A small on-screen overlay that sits alongside your work while Marc is active: Marc's face as it works, reasoning streaming live, and a panel showing the current session's tasks. It checks in with you periodically as it works.
+A small on-screen overlay appears while Marc is active. It shows Marc's face, live reasoning output, and the current session's tasks. It can also prompt the user for input while work is in progress.
 
-## Not done yet
-
-- **Model selection** — models are fixed for now; picking your own is coming.
-- **Shell hardening** — see above. No permission prompts, no sandboxing yet.
-- **Observation** — the idea is that Marc can watch your work sessions and learn your routines well enough to notice patterns you didn't point out. Still in design; I'm working through the trade-off between always-on observation (more signal) and opt-in, session-scoped observation (better for privacy).
-- **Recall-driven proactivity** — Marc surfacing your own past work when it's relevant again, like a data structure you designed weeks ago and forgot about.
-- **Memory provenance** — tracking where memories came from, how confident Marc is in them, and when they were last confirmed.
+### 👁️ Observation
+Observation is an opt-in mode toggled with `Ctrl+O`. While it is active, Marc captures changes across the user's screens, analyzes the current activity, searches memory for relevant context, and sends useful findings to the main agent. The observation session ends when the mode is toggled off.
 
 ## Installation & Usage
 
