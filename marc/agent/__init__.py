@@ -627,7 +627,7 @@ async def create_new_agent() -> Runnable:
         ),
     )
     model = ChatOpenAI(
-        model="gpt-5.6-terra",
+        model="gpt-6-sol",
         reasoning={"effort": "medium", "summary": "concise"},
     )
     agent = create_agent(

@@ -79,7 +79,7 @@ class Observer:
 
     @classmethod
     def _get_model(cls) -> ChatOpenAI:
-        return ChatOpenAI(model="gpt-5.6-luna", reasoning={"effort": "none"})
+        return ChatOpenAI(model="gpt-6-luna", reasoning={"effort": "none"})
 
     @classmethod
     def _forward_to_agent(cls, content: str) -> bool:

@@ -31,7 +31,7 @@ Marc is a Textual TUI wrapping a LangChain agent. Three screens, one agent, thre
 
 `marc/agent/__init__.py` is the center of the project: a single `SYSTEM_PROMPT_TEMPLATE` (`string.Template`) plus every tool definition. `create_new_agent()` substitutes three runtime values into that template — user profile, short-term memory, and the discovered skill catalog — and builds a fresh `create_agent` per chat screen. Prompt behavior is edited here, not in config; the template's `$`-placeholders mean literal `$` in the prompt must be escaped.
 
-Two models throughout: `gpt-5.6-terra` for the main agent, `gpt-5.6-luna` for everything else (memory summarization, chat naming, computer-use subagent).
+Two models throughout: `gpt-6-sol` for the main agent, `gpt-6-luna` for everything else (memory summarization, chat naming, computer-use subagent).
 
 ### Memory tiers
 

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 def get_model() -> ChatOpenAI:
     return ChatOpenAI(
-        model="gpt-5.6-luna",
+        model="gpt-6-luna",
         reasoning={"effort": "none"},
     )
 

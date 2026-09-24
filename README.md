@@ -57,7 +57,7 @@ Three primary APIs are required to use Marc: [OpenAI](https://platform.openai.co
 ## Stack
 
 - LangChain + LangGraph for orchestration
-- OpenAI models only for now — GPT-5.6-terra for the main agent, GPT-5.6-luna for everything else. One provider keeps things simple to set up and test while the project is young; model and provider selection is on the roadmap.
+- OpenAI models only for now — GPT-6 Sol for the main agent, GPT-6 Luna for everything else. One provider keeps things simple to set up and test while the project is young; model and provider selection is on the roadmap.
 - Mem0 for long-term memory
 - Textual for the TUI
 - Tavily for web access
